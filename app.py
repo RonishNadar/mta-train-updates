@@ -177,11 +177,15 @@ def main() -> int:
                 # ---------- MAIN NAV ----------
                 if state == STATE_MAIN:
                     if k == "LEFT":
-                        page = max(0, page - 1)
+                        # wrap: 0 -> last_page
+                        page = last_page if page == 0 else (page - 1)
                         state_changed = True
+
                     elif k == "RIGHT":
-                        page = min(last_page, page + 1)
+                        # wrap: last_page -> 0
+                        page = 0 if page == last_page else (page + 1)
                         state_changed = True
+
                     elif k == "SELECT":
                         if page == last_page:
                             state = STATE_SETTINGS_ROOT
@@ -192,15 +196,12 @@ def main() -> int:
                 # ---------- SETTINGS ROOT ----------
                 elif state == STATE_SETTINGS_ROOT:
                     if k == "UP":
-                        new_sel = max(0, settings_sel - 1)
-                        if new_sel != settings_sel:
-                            settings_sel = new_sel
-                            state_changed = True
+                        settings_sel = (settings_sel - 1) % 4
+                        state_changed = True
                     elif k == "DOWN":
-                        new_sel = min(3, settings_sel + 1)
-                        if new_sel != settings_sel:
-                            settings_sel = new_sel
-                            state_changed = True
+                        settings_sel = (settings_sel + 1) % 4
+                        state_changed = True
+
                     elif k == "LEFT":
                         state = STATE_MAIN
                         state_changed = True
