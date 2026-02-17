@@ -6,18 +6,6 @@
     "http_timeout_sec": 12
   },
   "stations": [
-    // {
-    //   "name": "Times Sq (N-bound)",
-    //   "feed": "NQRW",
-    //   "stop_id": "R16N",
-    //   "run_for_sec": 0
-    // },
-    // {
-    //   "name": "Times Sq (S-bound)",
-    //   "feed": "NQRW",
-    //   "stop_id": "R16S",
-    //   "run_for_sec": 0
-    // },
     {
       "name": "Fort Hamilton Pkwy (N) Manhattan-bound",
       "feed": "NQRW",
