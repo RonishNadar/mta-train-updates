@@ -181,18 +181,27 @@ class LCDUI:
         ]
         self._write_lines(lines)
 
-    def render_wifi_list_page(self, networks: List[str], active_ssid: str, selected_idx: int) -> None:
+    def render_wifi_list_page(self, networks: List[str], active_ssid: str, selected_idx: int, status: str = "") -> None:
         """
-        Shows up to 2 SSIDs at a time (lines 2-3), with active network marked.
-        Up/Down moves selection. Select picks.
+        20x4:
+        L1: Wi Fi:
+        L2: >* SSID
+        L3:  * SSID
+        L4: status or time
         """
         now = time.strftime("%H:%M")
+
+        if status:
+            bottom = status
+        else:
+            bottom = now
+
         if not networks:
             lines = [
                 self._pad("Wi Fi:", 20),
                 self._pad("No networks", 20),
                 self._pad("Left: Back", 20),
-                self._pad(now, 20),
+                self._pad(bottom, 20),
             ]
             self._write_lines(lines)
             return
@@ -202,21 +211,20 @@ class LCDUI:
         win = networks[start : start + 2]
 
         lines = [self._pad("Wi Fi:", 20)]
-        for i, ssid in enumerate(win):
-            abs_idx = start + i
-            prefix = ">" if abs_idx == selected_idx else " "
-            mark = "*" if ssid == active_ssid and ssid else " "
-            # Fit: "> * MyNetworkName"
-            lines.append(self._pad(f"{prefix}{mark} {ssid}", 20))
 
-        lines.append(self._pad("Sel: Connect  <Bk", 20))
-        # last line time
-        lines[-1] = self._pad(now, 20)
-        # Overwrite line 4 to show nav hints + time? You want time always; keep time.
-        # Keep hints on line 3 already via "Sel: Connect  <Bk" if needed:
-        lines[3] = self._pad(now, 20)
+        for i in range(2):
+            if i < len(win):
+                ssid = win[i]
+                abs_idx = start + i
+                prefix = ">" if abs_idx == selected_idx else " "
+                mark = "*" if ssid == active_ssid and ssid else " "
+                lines.append(self._pad(f"{prefix}{mark} {ssid}", 20))
+            else:
+                lines.append(" " * 20)
 
+        lines.append(self._pad(bottom, 20))
         self._write_lines(lines)
+
 
     def render_wifi_password_page(self, ssid: str, password: str, cursor: int) -> None:
         """
