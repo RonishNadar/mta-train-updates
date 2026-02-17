@@ -252,66 +252,81 @@ class LCDUI:
 
     def _big_digit(self, d: str) -> List[str]:
         """
-        Returns [row0, row1] each 3 chars wide using big charset chars 0..5.
-        """
-        sp = " "
-        UL, UM, UR = chr(0), chr(1), chr(2)
-        LL, LM, LR = chr(3), chr(4), chr(5)
-
-        digits = {
-            "0": [UL + UM + UR, LL + LM + LR],
-            "1": [sp + UR + sp, sp + LR + sp],
-            "2": [sp + UM + UR, LL + LM + sp],
-            "3": [sp + UM + UR, sp + LM + LR],
-            "4": [UL + sp + UR, sp + sp + LR],
-            "5": [UL + UM + sp, sp + LM + LR],
-            "6": [UL + UM + sp, LL + LM + LR],
-            "7": [sp + UM + UR, sp + sp + LR],
-            "8": [UL + UM + UR, LL + LM + LR],
-            "9": [UL + UM + UR, sp + LM + LR],
+        square_four font digit:
+        returns [row0, row1], each is 2 characters wide.
+        Uses Arduino mapping:
+        square_four_digits[10][4] =
+        {
+            {255,255,3,2}, {4,5,254,5}, {6,2,3,6}, {0,2,1,2}, {7,1,254,5},
+            {3,6,6,2}, {3,6,3,2}, {0,2,254,5}, {3,2,3,2}, {3,2,6,2}
         }
-        return digits.get(d, [sp * 3, sp * 3])
+        Where:
+        255 = full block (use chr(255))
+        254 = empty (use space)
+        0..7 = custom chars (use chr(n))
+        """
+        # digit tile table from Arduino code
+        # order: [top-left, top-right, bottom-left, bottom-right]
+        square_four_digits = {
+            "0": (255, 255, 3, 2),
+            "1": (4, 5, 254, 5),
+            "2": (6, 2, 3, 6),
+            "3": (0, 2, 1, 2),
+            "4": (7, 1, 254, 5),
+            "5": (3, 6, 6, 2),
+            "6": (3, 6, 3, 2),
+            "7": (0, 2, 254, 5),
+            "8": (3, 2, 3, 2),
+            "9": (3, 2, 6, 2),
+        }
+
+        tiles = square_four_digits.get(str(d), (254, 254, 254, 254))
+        tl, tr, bl, br = tiles
+
+        def to_char(v: int) -> str:
+            if v == 254:
+                return " "          # empty
+            if v == 255:
+                return chr(255)     # full block in HD44780 ROM
+            return chr(v)           # custom char 0..7
+
+        row0 = to_char(tl) + to_char(tr)
+        row1 = to_char(bl) + to_char(br)
+        return [row0, row1]
+
 
     # -------------------- RENDERERS --------------------
 
     def render_home(self, page_idx: int) -> None:
-        """
-        Home page:
-          - 2-row big time (HH:MM)
-          - bottom-right shows "< H >" with a custom Home icon
-        """
         self._load_charset_big()
 
-        hhmm = time.strftime("%H%M")
-        HH = hhmm[:2]
-        MM = hhmm[2:]
+        hhmm = time.strftime("%H:%M")  # note the colon included
+        # Format: "HH:MM"
+        H1, H2, _, M1, M2 = hhmm[0], hhmm[1], hhmm[2], hhmm[3], hhmm[4]
 
-        d0 = self._big_digit(HH[0])
-        d1 = self._big_digit(HH[1])
-        d2 = self._big_digit(MM[0])
-        d3 = self._big_digit(MM[1])
+        d0 = self._big_digit(H1)
+        d1 = self._big_digit(H2)
+        d2 = self._big_digit(M1)
+        d3 = self._big_digit(M2)
 
-        colon = chr(6)  # big charset colon
-        row0 = d0[0] + d1[0] + colon + d2[0] + d3[0]
-        row1 = d0[1] + d1[1] + colon + d2[1] + d3[1]
+        # Use normal ':' character between hours and minutes
+        # Total width: 2+2+1+2+2 = 9 chars
+        row0 = d0[0] + d1[0] + ":" + d2[0] + d3[0]
+        row1 = d0[1] + d1[1] + " " + d2[1] + d3[1]   # space aligns better than ':' on bottom row
 
-        # Center into 20 cols
         pad_left = max(0, (20 - len(row0)) // 2)
         row0 = self._pad((" " * pad_left) + row0, 20)
         row1 = self._pad((" " * pad_left) + row1, 20)
 
         now_small = time.strftime("%H:%M")
-        home_icon = chr(7)  # big charset home icon at slot 7
-        page = f"< {home_icon} >".rjust(5)
+        # In square_four charset, slot 7 is NOT "home" anymore (it is square_four_07).
+        # So for bottom-right, use nav charset OR just show "< H >" with plain H.
+        # Best: keep it plain to avoid charset conflicts:
+        page = "< H >".rjust(5)
         line4 = self._pad(now_small, 15) + self._pad(page, 5)
 
-        lines = [
-            row0,
-            row1,
-            " " * 20,
-            line4,
-        ]
-        self._write_lines(lines)
+        self._write_lines([row0, row1, " " * 20, line4])
+
 
     def render_station(self, data: PageData, page_idx: int) -> None:
         self._load_charset_nav()
