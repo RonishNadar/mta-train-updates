@@ -2,6 +2,8 @@
 import socket
 import time
 import threading
+import json
+from pathlib import Path
 
 from mta_app.buttons import Buttons
 from mta_app.config import load_settings
@@ -11,10 +13,11 @@ from mta_app.web_config import WebConfigServer
 from mta_app.wifi_manager import has_nmcli, get_active_ssid, scan_ssids, connect_wifi
 from mta_app.weather import WeatherWorker, c_to_f
 
-import json
-from pathlib import Path
 
 def save_app_fields_to_settings(path: str, *, favorite_station_index, leave_buffer_min, temp_unit) -> None:
+    """
+    Persist runtime UI config into settings.json (no dataclass mutation required).
+    """
     p = Path(path)
     raw = json.loads(p.read_text(encoding="utf-8"))
     raw.setdefault("app", {})
@@ -22,6 +25,7 @@ def save_app_fields_to_settings(path: str, *, favorite_station_index, leave_buff
     raw["app"]["leave_buffer_min"] = int(leave_buffer_min)
     raw["app"]["temp_unit"] = str(temp_unit).upper()
     p.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+
 
 def get_local_ip() -> str:
     """
@@ -40,8 +44,8 @@ def get_local_ip() -> str:
 
 
 # UI states
-STATE_MAIN = "MAIN"                 # home/station/settings-root via left/right
-STATE_SETTINGS_ROOT = "SETTINGS"    # menu list
+STATE_MAIN = "MAIN"                 # home/station/settings-landing via left/right
+STATE_SETTINGS_ROOT = "SETTINGS"    # settings menu list
 STATE_IP = "IP"
 STATE_WIFI_LIST = "WIFI_LIST"
 STATE_WIFI_PASS = "WIFI_PASS"
@@ -51,12 +55,17 @@ STATE_ABOUT = "ABOUT"
 
 
 def main() -> int:
-    settings = load_settings("settings.json")
+    settings_path = "settings.json"
+    settings = load_settings(settings_path)
 
-    # LCD config (hardcoded; you can parse from settings.json if you want)
+    # ---- Runtime (mutable) copies for frozen dataclasses ----
+    favorite_station_index = settings.app.favorite_station_index
+    leave_buffer_min = settings.app.leave_buffer_min
+    temp_unit = settings.app.temp_unit
+
+    # LCD config
     i2c_port = 1
     i2c_address = 0x27
-
     lcd = LCDUI(i2c_port=i2c_port, i2c_address=i2c_address)
 
     # Buttons: BCM numbering
@@ -71,19 +80,19 @@ def main() -> int:
     websrv.start()
 
     # Weather background worker (Open-Meteo, no API key)
-    # Brooklyn default; change if you want
     weather = WeatherWorker(lat=40.6782, lon=-73.9442, refresh_s=600)
     weather.start()
 
     # Pages:
     # 0 = Home
     # 1..N = stations
-    # N+1 = Settings hub
+    # N+1 = Settings landing
     station_count = len(settings.stations)
     last_page = station_count + 1
     page = 0
 
-    # Settings menu selection index: 0..3 (IP/WiFi/Web/About)
+    # Settings menu selection index: 0..4
+    # ["IP address", "Wi Fi", "Select stations", "Leave buffer", "About"]
     state = STATE_MAIN
     settings_sel = 0
 
@@ -96,7 +105,6 @@ def main() -> int:
     wifi_pass = " " * 16
     wifi_cursor = 0
 
-    # Character set for password entry
     charset = list(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}.,:?/")
     charset_idx = 0
 
@@ -104,8 +112,6 @@ def main() -> int:
     wifi_scanning = False
     wifi_scan_status = ""
     wifi_scan_thread: threading.Thread | None = None
-
-    leave_buffer_min = settings.app.leave_buffer_min
 
     def start_wifi_scan() -> None:
         nonlocal wifi_scanning, wifi_scan_status, wifi_ssids, wifi_active, wifi_sel, wifi_scan_thread
@@ -141,26 +147,25 @@ def main() -> int:
         # ---------- RENDER ----------
         if state == STATE_MAIN:
             if page == 0:
-                leave_line = ""
-                fav = settings.app.favorite_station_index
-                if fav is None:
+                # Home: leave-in line based on favorite
+                if favorite_station_index is None:
                     leave_line = "Fav: (hold Select)"
                 else:
-                    snap = mon.get_snapshot(fav)
+                    snap = mon.get_snapshot(favorite_station_index)
                     etas = [eta for (_route, eta) in snap.arrivals if eta is not None]
                     if not etas:
                         leave_line = "Fav: no ETA"
                     else:
                         next_eta = min(etas)
-                        leave_in = next_eta - int(settings.app.leave_buffer_min)
+                        leave_in = next_eta - int(leave_buffer_min)
                         if leave_in <= 0:
                             leave_line = "Leave now"
                         else:
                             leave_line = f"Leave in {leave_in:02d} min"
 
-                unit = settings.app.temp_unit
                 ws = weather.get_snapshot()
 
+                unit = (temp_unit or "C").upper()
                 if unit == "F":
                     temp_val = c_to_f(ws.temp_c)
                     feels_val = c_to_f(ws.feels_like_c)
@@ -178,6 +183,7 @@ def main() -> int:
                     temp_unit=unit,
                     leave_line=leave_line,
                 )
+
             elif page == last_page:
                 lcd.render_settings_landing(page_idx=page)
 
@@ -208,9 +214,9 @@ def main() -> int:
         elif state == STATE_WEB:
             url = f"{ip}:8088"
             lcd.render_web_config_page(url=url)
-        
+
         elif state == STATE_BUFFER:
-            lcd.render_leave_buffer_page(settings.app.leave_buffer_min)
+            lcd.render_leave_buffer_page(leave_buffer_min)
 
         elif state == STATE_ABOUT:
             lcd.render_about_page()
@@ -226,7 +232,6 @@ def main() -> int:
                 ip = get_local_ip()
                 last_ip_refresh = now_t
 
-            # Button event
             ev = buttons.pop_event()
             state_changed = False
 
@@ -236,12 +241,10 @@ def main() -> int:
                 # ---------- MAIN NAV ----------
                 if state == STATE_MAIN:
                     if k == "LEFT":
-                        # wrap: 0 -> last_page
                         page = last_page if page == 0 else (page - 1)
                         state_changed = True
 
                     elif k == "RIGHT":
-                        # wrap: last_page -> 0
                         page = 0 if page == last_page else (page + 1)
                         state_changed = True
 
@@ -251,21 +254,20 @@ def main() -> int:
                             state_changed = True
                         else:
                             mon.force_refresh()
-                    
+
                     elif k == "SELECT_LONG":
                         # only when on a station page
                         if 1 <= page <= station_count:
                             fav_idx = page - 1
-                            settings.app.favorite_station_index = fav_idx
+                            favorite_station_index = fav_idx
                             save_app_fields_to_settings(
-                                "settings.json",
-                                favorite_station_index=settings.app.favorite_station_index,
-                                leave_buffer_min=settings.app.leave_buffer_min,
-                                temp_unit=settings.app.temp_unit,
+                                settings_path,
+                                favorite_station_index=favorite_station_index,
+                                leave_buffer_min=leave_buffer_min,
+                                temp_unit=temp_unit,
                             )
                             print(f"[Fav] Set favorite station index = {fav_idx} ({settings.stations[fav_idx].stop_name})")
                             state_changed = True
-
 
                 # ---------- SETTINGS ROOT ----------
                 elif state == STATE_SETTINGS_ROOT:
@@ -275,7 +277,6 @@ def main() -> int:
                     elif k == "DOWN":
                         settings_sel = (settings_sel + 1) % 5
                         state_changed = True
-
                     elif k == "LEFT":
                         state = STATE_MAIN
                         state_changed = True
@@ -304,22 +305,23 @@ def main() -> int:
                         state = STATE_SETTINGS_ROOT
                         state_changed = True
 
+                # ---------- LEAVE BUFFER PAGE ----------
                 elif state == STATE_BUFFER:
                     if k == "UP":
-                        settings.app.leave_buffer_min = min(60, settings.app.leave_buffer_min + 1)
+                        leave_buffer_min = min(60, leave_buffer_min + 1)
                         state_changed = True
                     elif k == "DOWN":
-                        settings.app.leave_buffer_min = max(0, settings.app.leave_buffer_min - 1)
+                        leave_buffer_min = max(0, leave_buffer_min - 1)
                         state_changed = True
                     elif k == "LEFT":
                         state = STATE_SETTINGS_ROOT
                         state_changed = True
                     elif k == "SELECT":
                         save_app_fields_to_settings(
-                            "settings.json",
-                            favorite_station_index=settings.app.favorite_station_index,
-                            leave_buffer_min=settings.app.leave_buffer_min,
-                            temp_unit=settings.app.temp_unit,
+                            settings_path,
+                            favorite_station_index=favorite_station_index,
+                            leave_buffer_min=leave_buffer_min,
+                            temp_unit=temp_unit,
                         )
                         state = STATE_SETTINGS_ROOT
                         state_changed = True
@@ -336,14 +338,23 @@ def main() -> int:
                         state = STATE_SETTINGS_ROOT
                         state_changed = True
                     elif k == "SELECT":
-                        # reload settings.json without rebooting
-                        settings = load_settings("settings.json")
+                        # Reload settings.json without rebooting
+                        settings = load_settings(settings_path)
+
+                        # Refresh runtime values
+                        favorite_station_index = settings.app.favorite_station_index
+                        leave_buffer_min = settings.app.leave_buffer_min
+                        temp_unit = settings.app.temp_unit
+
+                        # Restart monitor with new station list
                         mon.stop()
                         mon = Monitor(settings)
                         mon.start()
+
                         station_count = len(settings.stations)
                         last_page = station_count + 1
                         page = min(page, last_page)
+
                         state_changed = True
 
                 # ---------- WIFI LIST PAGE ----------
@@ -364,7 +375,6 @@ def main() -> int:
                             state = STATE_SETTINGS_ROOT
                             state_changed = True
                         elif wifi_scanning:
-                            # ignore while scanning
                             pass
                         elif not wifi_ssids:
                             start_wifi_scan()
@@ -406,24 +416,19 @@ def main() -> int:
                         state_changed = True
 
             # ---------- RENDER SCHEDULER ----------
-            # Update LCD only when needed:
-            # - immediately on state/page changes or button events that change display
-            # - periodically for clock/marquee/ETAs (station pages more often)
             if state == STATE_MAIN and (0 < page < last_page):
                 min_render_period = 0.12  # station page: marquee + ETA refresh
             else:
-                min_render_period = 0.5   # mostly static pages: reduce I2C writes
+                min_render_period = 0.5   # mostly static pages
 
             periodic_due = (now_t - last_render_t) >= min_render_period
 
-            # Also refresh Wi-Fi list page display while scanning to update status text
             if state == STATE_WIFI_LIST and wifi_scanning:
                 periodic_due = True
 
             if state_changed or periodic_due:
                 render_now(now_t)
 
-            # Fast loop for responsive buttons
             time.sleep(0.02)
 
     except KeyboardInterrupt:
