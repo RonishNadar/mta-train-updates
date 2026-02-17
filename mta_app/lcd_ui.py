@@ -250,7 +250,17 @@ class LCDUI:
         self._write_lines(lines)
 
     def _write_lines(self, lines: List[str]) -> None:
-        self.lcd.home()
+        # Cache previous lines to avoid rewriting the LCD constantly (I2C is slow)
+        if not hasattr(self, "_last_lines"):
+            self._last_lines = [""] * self.ROWS
+
+        # Normalize to exactly 4 padded lines
+        norm = [self._pad(lines[i], self.COLS) for i in range(self.ROWS)]
+
+        # Write only lines that changed
         for r in range(self.ROWS):
-            self.lcd.cursor_pos = (r, 0)
-            self.lcd.write_string(self._pad(lines[r], self.COLS))
+            if norm[r] != self._last_lines[r]:
+                self.lcd.cursor_pos = (r, 0)
+                self.lcd.write_string(norm[r])
+                self._last_lines[r] = norm[r]
+

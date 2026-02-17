@@ -45,11 +45,15 @@ def main() -> int:
     i2c_address = 0x27
 
     lcd = LCDUI(i2c_port=i2c_port, i2c_address=i2c_address)
+
+    # Buttons: BCM numbering
     buttons = Buttons(left_gpio=16, right_gpio=20, select_gpio=21, up_gpio=19, down_gpio=26)
 
+    # MTA background monitor
     mon = Monitor(settings)
     mon.start()
 
+    # Web config server for editing settings.json
     websrv = WebConfigServer(port=8088)
     websrv.start()
 
@@ -61,13 +65,13 @@ def main() -> int:
     last_page = station_count + 1
     page = 0
 
-    # Settings menu selection index: 0..3
+    # Settings menu selection index: 0..3 (IP/WiFi/Web/About)
     state = STATE_MAIN
     settings_sel = 0
 
     # Wi-Fi support + UI vars
     wifi_supported = has_nmcli()
-    wifi_ssids = []
+    wifi_ssids: list[str] = []
     wifi_sel = 0
     wifi_active = ""
     wifi_target = ""
@@ -81,11 +85,11 @@ def main() -> int:
     # Background Wi-Fi scanning state to avoid UI freeze
     wifi_scanning = False
     wifi_scan_status = ""
-    wifi_scan_thread = None
+    wifi_scan_thread: threading.Thread | None = None
 
     def start_wifi_scan() -> None:
         nonlocal wifi_scanning, wifi_scan_status, wifi_ssids, wifi_active, wifi_sel, wifi_scan_thread
-        if wifi_scanning:
+        if wifi_scanning or not wifi_supported:
             return
         wifi_scanning = True
         wifi_scan_status = "Scanning..."
@@ -105,20 +109,67 @@ def main() -> int:
         wifi_scan_thread = threading.Thread(target=worker, daemon=True)
         wifi_scan_thread.start()
 
-    # Cache IP and refresh it occasionally (Wi-Fi can change)
+    # Cache IP and refresh it occasionally
     ip = "-"
     last_ip_refresh = 0.0
 
+    # Render scheduler state
+    last_render_t = 0.0
+
+    def render_now(now_t: float) -> None:
+        nonlocal last_render_t
+        # ---------- RENDER ----------
+        if state == STATE_MAIN:
+            if page == 0:
+                lcd.render_home(page_idx=page)
+            elif page == last_page:
+                lcd.render_settings_menu(selected_idx=settings_sel, page_idx=page)
+            else:
+                st = settings.stations[page - 1]
+                snap = mon.get_snapshot(page - 1)
+                data = PageData(
+                    stop_name=st.stop_name,
+                    direction=st.direction,
+                    direction_label=st.direction_label,
+                    arrivals=snap.arrivals,
+                )
+                lcd.render_station(data, page_idx=page)
+
+        elif state == STATE_SETTINGS_ROOT:
+            lcd.render_settings_menu(selected_idx=settings_sel, page_idx=page)
+
+        elif state == STATE_IP:
+            lcd.render_ip_page(ip_address=ip)
+
+        elif state == STATE_WIFI_LIST:
+            status = wifi_scan_status if (wifi_scanning or wifi_scan_status) else ""
+            lcd.render_wifi_list_page(wifi_ssids, wifi_active, wifi_sel, status=status)
+
+        elif state == STATE_WIFI_PASS:
+            lcd.render_wifi_password_page(wifi_target, wifi_pass, wifi_cursor)
+
+        elif state == STATE_WEB:
+            url = f"{ip}:8088"
+            lcd.render_web_config_page(url=url)
+
+        elif state == STATE_ABOUT:
+            lcd.render_about_page()
+
+        last_render_t = now_t
+
     try:
         while True:
-            # Refresh IP every 5 seconds
             now_t = time.time()
+
+            # Refresh IP every 5 seconds (cheap)
             if now_t - last_ip_refresh > 5.0:
                 ip = get_local_ip()
                 last_ip_refresh = now_t
 
-            # Handle buttons
+            # Button event
             ev = buttons.pop_event()
+            state_changed = False
+
             if ev:
                 k = ev.kind
 
@@ -126,22 +177,32 @@ def main() -> int:
                 if state == STATE_MAIN:
                     if k == "LEFT":
                         page = max(0, page - 1)
+                        state_changed = True
                     elif k == "RIGHT":
                         page = min(last_page, page + 1)
+                        state_changed = True
                     elif k == "SELECT":
                         if page == last_page:
                             state = STATE_SETTINGS_ROOT
+                            state_changed = True
                         else:
                             mon.force_refresh()
 
                 # ---------- SETTINGS ROOT ----------
                 elif state == STATE_SETTINGS_ROOT:
                     if k == "UP":
-                        settings_sel = max(0, settings_sel - 1)
+                        new_sel = max(0, settings_sel - 1)
+                        if new_sel != settings_sel:
+                            settings_sel = new_sel
+                            state_changed = True
                     elif k == "DOWN":
-                        settings_sel = min(3, settings_sel + 1)
+                        new_sel = min(3, settings_sel + 1)
+                        if new_sel != settings_sel:
+                            settings_sel = new_sel
+                            state_changed = True
                     elif k == "LEFT":
                         state = STATE_MAIN
+                        state_changed = True
                     elif k == "SELECT":
                         if settings_sel == 0:
                             state = STATE_IP
@@ -150,30 +211,32 @@ def main() -> int:
                             wifi_sel = 0
                             wifi_ssids = []
                             wifi_active = ""
-                            if not wifi_supported:
-                                wifi_scan_status = "nmcli missing"
-                                wifi_scanning = False
-                            else:
+                            wifi_scan_status = "nmcli missing" if not wifi_supported else "Scanning..."
+                            if wifi_supported:
                                 start_wifi_scan()
                         elif settings_sel == 2:
                             state = STATE_WEB
                         elif settings_sel == 3:
                             state = STATE_ABOUT
+                        state_changed = True
 
                 # ---------- IP PAGE ----------
                 elif state == STATE_IP:
                     if k == "LEFT":
                         state = STATE_SETTINGS_ROOT
+                        state_changed = True
 
                 # ---------- ABOUT PAGE ----------
                 elif state == STATE_ABOUT:
                     if k == "LEFT":
                         state = STATE_SETTINGS_ROOT
+                        state_changed = True
 
                 # ---------- WEB PAGE ----------
                 elif state == STATE_WEB:
                     if k == "LEFT":
                         state = STATE_SETTINGS_ROOT
+                        state_changed = True
                     elif k == "SELECT":
                         # reload settings.json without rebooting
                         settings = load_settings("settings.json")
@@ -183,100 +246,87 @@ def main() -> int:
                         station_count = len(settings.stations)
                         last_page = station_count + 1
                         page = min(page, last_page)
+                        state_changed = True
 
                 # ---------- WIFI LIST PAGE ----------
                 elif state == STATE_WIFI_LIST:
                     if k == "LEFT":
                         state = STATE_SETTINGS_ROOT
+                        state_changed = True
                     elif k == "UP":
                         if wifi_ssids:
                             wifi_sel = max(0, wifi_sel - 1)
+                            state_changed = True
                     elif k == "DOWN":
                         if wifi_ssids:
                             wifi_sel = min(len(wifi_ssids) - 1, wifi_sel + 1)
+                            state_changed = True
                     elif k == "SELECT":
-                        # If still scanning, treat SELECT as "refresh scan"
-                        if wifi_supported and wifi_scanning:
-                            # ignore or allow refresh:
+                        if not wifi_supported:
+                            state = STATE_SETTINGS_ROOT
+                            state_changed = True
+                        elif wifi_scanning:
+                            # ignore while scanning
                             pass
-                        elif wifi_supported and not wifi_scanning:
-                            if not wifi_ssids:
-                                # allow rescan on SELECT when empty
-                                start_wifi_scan()
-                            else:
-                                wifi_target = wifi_ssids[wifi_sel]
-                                wifi_pass = " " * 16
-                                wifi_cursor = 0
-                                charset_idx = 0
-                                state = STATE_WIFI_PASS
+                        elif not wifi_ssids:
+                            start_wifi_scan()
+                            state_changed = True
+                        else:
+                            wifi_target = wifi_ssids[wifi_sel]
+                            wifi_pass = " " * 16
+                            wifi_cursor = 0
+                            charset_idx = 0
+                            state = STATE_WIFI_PASS
+                            state_changed = True
 
                 # ---------- WIFI PASSWORD PAGE ----------
                 elif state == STATE_WIFI_PASS:
                     if k == "LEFT":
-                        # go back to list without connecting
                         state = STATE_WIFI_LIST
+                        state_changed = True
                     elif k == "RIGHT":
                         wifi_cursor = min(15, wifi_cursor + 1)
                         charset_idx = 0
+                        state_changed = True
                     elif k == "UP" or k == "DOWN":
-                        # change character at cursor
                         if k == "UP":
                             charset_idx = (charset_idx + 1) % len(charset)
                         else:
                             charset_idx = (charset_idx - 1) % len(charset)
-
                         pw_list = list(wifi_pass)
                         pw_list[wifi_cursor] = charset[charset_idx]
                         wifi_pass = "".join(pw_list)
+                        state_changed = True
                     elif k == "SELECT":
-                        # Attempt connection
                         pw = wifi_pass.strip()
-                        ok, msg = connect_wifi(wifi_target, pw)
+                        ok, _msg = connect_wifi(wifi_target, pw)
 
-                        # After connect attempt, go back and refresh list in background
+                        # Show result briefly on list page
                         state = STATE_WIFI_LIST
-                        wifi_scan_status = ("Connected" if ok else "Failed")
+                        wifi_scan_status = "Connected" if ok else "Failed"
                         start_wifi_scan()
+                        state_changed = True
 
-            # ---------- RENDER ----------
-            if state == STATE_MAIN:
-                if page == 0:
-                    lcd.render_home(page_idx=page)
-                elif page == last_page:
-                    lcd.render_settings_menu(selected_idx=settings_sel, page_idx=page)
-                else:
-                    st = settings.stations[page - 1]
-                    snap = mon.get_snapshot(page - 1)
-                    data = PageData(
-                        stop_name=st.stop_name,
-                        direction=st.direction,
-                        direction_label=st.direction_label,
-                        arrivals=snap.arrivals,
-                    )
-                    lcd.render_station(data, page_idx=page)
+            # ---------- RENDER SCHEDULER ----------
+            # Update LCD only when needed:
+            # - immediately on state/page changes or button events that change display
+            # - periodically for clock/marquee/ETAs (station pages more often)
+            if state == STATE_MAIN and (0 < page < last_page):
+                min_render_period = 0.12  # station page: marquee + ETA refresh
+            else:
+                min_render_period = 0.5   # mostly static pages: reduce I2C writes
 
-            elif state == STATE_SETTINGS_ROOT:
-                lcd.render_settings_menu(selected_idx=settings_sel, page_idx=page)
+            periodic_due = (now_t - last_render_t) >= min_render_period
 
-            elif state == STATE_IP:
-                lcd.render_ip_page(ip_address=ip)
+            # Also refresh Wi-Fi list page display while scanning to update status text
+            if state == STATE_WIFI_LIST and wifi_scanning:
+                periodic_due = True
 
-            elif state == STATE_WIFI_LIST:
-                status = wifi_scan_status if (wifi_scanning or wifi_scan_status) else ""
-                lcd.render_wifi_list_page(wifi_ssids, wifi_active, wifi_sel, status=status)
+            if state_changed or periodic_due:
+                render_now(now_t)
 
-            elif state == STATE_WIFI_PASS:
-                lcd.render_wifi_password_page(wifi_target, wifi_pass, wifi_cursor)
-
-            elif state == STATE_WEB:
-                url = f"{ip}:8088"
-                lcd.render_web_config_page(url=url)
-
-            elif state == STATE_ABOUT:
-                lcd.render_about_page()
-
-            # UI refresh rate (also drives marquee)
-            time.sleep(0.12)
+            # Fast loop for responsive buttons
+            time.sleep(0.02)
 
     except KeyboardInterrupt:
         return 0
