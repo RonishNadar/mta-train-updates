@@ -75,7 +75,9 @@ def main() -> int:
                 last_ip_refresh = now_t
 
             ev = buttons.pop_event()
+
             if ev:
+                print(f"[APP] got {ev.kind} at {ev.t:.3f} state={state} page={page}")
                 k = ev.kind
 
                 # ---------- MAIN NAV ----------
