@@ -248,38 +248,61 @@ class LCDUI:
         weather_kind: str,
         weather_text: str,
         pop_pct: Optional[int],
-        temp_f: Optional[float],
-        feels_f: Optional[float],
+        temp_val: Optional[float],
+        feels_val: Optional[float],
+        temp_unit: str,  # "C" or "F"
     ) -> None:
         """
-        Home page:
-          Row1: [icon] Condition  PoP:XX%
-          Row2: T:xxF  Feels:yyF
-          Row3: blank (future)
-          Row4: HH:MM + < home >
+        Home page target format:
+        Row1: [icon] Overcast PoP:  02%
+        Row2: Temp.:-20C Feel:-04C
+        Row3: blank
+        Row4: HH:MM + < home >
         """
         self._load_charset_home()
 
         icon = self._weather_icon_kind(weather_kind)
-        cond = (weather_text or "-").strip()
-        cond = cond[:10]  # keep short so line fits
 
-        pop = "--" if pop_pct is None else f"{int(pop_pct):02d}"
-        line1 = f"{icon} {cond}  PoP:{pop}%"
+        # Row1
+        cond = (weather_text or "-").strip()
+        cond = cond[:10]  # keep similar to your example
+
+        # Pop shown as 2 digits, aligned like: "PoP:  02%"
+        if pop_pct is None:
+            pop2 = "--"
+        else:
+            pop2 = f"{int(pop_pct) % 100:02d}"
+        line1 = f"{icon} {cond} PoP:{pop2:>4}%"
         line1 = self._pad(line1, 20)
 
-        t = self._fmt_int_or_dash(temp_f)
-        f = self._fmt_int_or_dash(feels_f)
-        line2 = self._pad(f"T:{t}F  Feels:{f}F", 20)
+        # Row2: Temp.:-20C Feel:-04C  (exactly 20 chars ideally)
+        unit = (temp_unit or "C").upper()
+        unit = "F" if unit == "F" else "C"
+
+        def fmt2(v: Optional[float]) -> str:
+            if v is None:
+                return "--"
+            n = int(round(v))
+            # render -04, 05, 20
+            if n < 0:
+                return f"-{abs(n):02d}"
+            return f"{n:02d}"
+
+        t = fmt2(temp_val)
+        f = fmt2(feels_val)
+        line2 = f"Temp.:{t}{unit} Feel:{f}{unit}"
+        line2 = self._pad(line2, 20)
 
         line3 = " " * 20
 
+        # Row4
         now = time.strftime("%H:%M")
         home = self._home_char()
         page = f"< {home} >".rjust(5)
         line4 = self._pad(now, 15) + self._pad(page, 5)
 
         self._write_lines([line1, line2, line3, line4])
+
 
     def render_station(self, data: PageData, page_idx: int) -> None:
         self._load_charset_nav()

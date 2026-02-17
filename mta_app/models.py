@@ -10,6 +10,7 @@ class AppConfig:
     print_limit: int
     run_for_sec: int
     http_timeout_sec: int
+    temp_unit: str = "C"
 
 
 @dataclass(frozen=True)

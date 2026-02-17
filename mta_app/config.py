@@ -20,12 +20,25 @@ def load_settings(path: str) -> Settings:
     Loads settings.json with station entries that look like:
 
     {
-      "stop_name": "Fort Hamilton Pkwy (N)",
-      "gtfs_stop_id": "N03",
-      "direction": "N",
-      "direction_label": "Manhattan",
-      "feed": "NQRW",
-      "run_for_sec": 0
+      "app": {
+        "poll_interval_sec": 20,
+        "print_limit": 2,
+        "run_for_sec": 0,
+        "http_timeout_sec": 8,
+
+        # NEW:
+        "temp_unit": "C"   # "C" or "F"
+      },
+      "stations": [
+        {
+          "stop_name": "Fort Hamilton Pkwy (N)",
+          "gtfs_stop_id": "N03",
+          "direction": "N",
+          "direction_label": "Manhattan",
+          "feed": "NQRW",
+          "run_for_sec": 0
+        }
+      ]
     }
 
     Note: GTFS-Realtime stop_id will be built as gtfs_stop_id + direction
@@ -40,13 +53,17 @@ def load_settings(path: str) -> Settings:
     app_raw = _require(raw, "app", "root")
     stations_raw = _require(raw, "stations", "root")
 
+    # ---------------- APP ----------------
     app = AppConfig(
         poll_interval_sec=int(_require(app_raw, "poll_interval_sec", "app")),
         print_limit=int(_require(app_raw, "print_limit", "app")),
         run_for_sec=int(_require(app_raw, "run_for_sec", "app")),
         http_timeout_sec=int(_require(app_raw, "http_timeout_sec", "app")),
+        # NEW: temperature unit (defaults to C if missing/invalid)
+        temp_unit=str(app_raw.get("temp_unit", "C")).strip().upper(),
     )
 
+    # Validate numeric fields
     if app.poll_interval_sec <= 0:
         raise ValueError("app.poll_interval_sec must be > 0")
     if app.print_limit <= 0:
@@ -56,6 +73,11 @@ def load_settings(path: str) -> Settings:
     if app.http_timeout_sec <= 0:
         raise ValueError("app.http_timeout_sec must be > 0")
 
+    # Validate/normalize temp_unit
+    if app.temp_unit not in ("C", "F"):
+        app.temp_unit = "C"
+
+    # ---------------- STATIONS ----------------
     if not isinstance(stations_raw, list) or len(stations_raw) == 0:
         raise ValueError("stations must be a non-empty list")
 

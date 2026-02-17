@@ -128,13 +128,21 @@ def main() -> int:
         if state == STATE_MAIN:
             if page == 0:
                 ws = weather.get_snapshot()
+                unit = settings.temp_unit  # "C" or "F"
+                if unit == "F":
+                    temp_val = c_to_f(ws.temp_c)
+                    feels_val = c_to_f(ws.feels_like_c)
+                else:
+                    temp_val = ws.temp_c
+                    feels_val = ws.feels_like_c
                 lcd.render_home(
                     page_idx=page,
                     weather_kind=ws.condition_kind,
                     weather_text=ws.condition_text,
                     pop_pct=ws.pop_pct,
-                    temp_f=c_to_f(ws.temp_c),
-                    feels_f=c_to_f(ws.feels_like_c),
+                    temp_val=temp_val,
+                    feels_val=feels_val,
+                    temp_unit=unit,
                 )
             elif page == last_page:
                 lcd.render_settings_landing(page_idx=page)
