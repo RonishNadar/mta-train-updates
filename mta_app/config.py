@@ -1,4 +1,6 @@
+# mta_app/config.py
 from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Any, Dict, List
@@ -14,6 +16,21 @@ def _require(d: Dict[str, Any], key: str, where: str) -> Any:
 
 
 def load_settings(path: str) -> Settings:
+    """
+    Loads settings.json with station entries that look like:
+
+    {
+      "stop_name": "Fort Hamilton Pkwy (N)",
+      "gtfs_stop_id": "N03",
+      "direction": "N",
+      "direction_label": "Manhattan",
+      "feed": "NQRW",
+      "run_for_sec": 0
+    }
+
+    Note: GTFS-Realtime stop_id will be built as gtfs_stop_id + direction
+          (e.g., "N03" + "N" -> "N03N")
+    """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Settings file not found: {p.resolve()}")
@@ -39,24 +56,40 @@ def load_settings(path: str) -> Settings:
     if app.http_timeout_sec <= 0:
         raise ValueError("app.http_timeout_sec must be > 0")
 
-    stations: List[StationConfig] = []
     if not isinstance(stations_raw, list) or len(stations_raw) == 0:
         raise ValueError("stations must be a non-empty list")
 
+    stations: List[StationConfig] = []
     for i, s in enumerate(stations_raw):
         where = f"stations[{i}]"
-        name = str(_require(s, "name", where))
-        feed = str(_require(s, "feed", where))
-        stop_id = str(_require(s, "stop_id", where))
+
+        stop_name = str(_require(s, "stop_name", where))
+        gtfs_stop_id = str(_require(s, "gtfs_stop_id", where)).strip()
+        direction = str(_require(s, "direction", where)).strip().upper()
+        direction_label = str(_require(s, "direction_label", where)).strip()
+        feed = str(_require(s, "feed", where)).strip()
         run_for_sec = int(s.get("run_for_sec", 0))
 
         if feed not in FEEDS:
-            raise ValueError(f"{where}.feed='{feed}' not in supported feeds: {sorted(FEEDS.keys())}")
-        if not stop_id:
-            raise ValueError(f"{where}.stop_id cannot be empty")
+            raise ValueError(
+                f"{where}.feed='{feed}' not in supported feeds: {sorted(FEEDS.keys())}"
+            )
+        if not gtfs_stop_id:
+            raise ValueError(f"{where}.gtfs_stop_id cannot be empty")
+        if direction not in ("N", "S"):
+            raise ValueError(f"{where}.direction must be 'N' or 'S'")
         if run_for_sec < 0:
             raise ValueError(f"{where}.run_for_sec must be >= 0")
 
-        stations.append(StationConfig(name=name, feed=feed, stop_id=stop_id, run_for_sec=run_for_sec))
+        stations.append(
+            StationConfig(
+                stop_name=stop_name,
+                gtfs_stop_id=gtfs_stop_id,
+                direction=direction,
+                direction_label=direction_label,
+                feed=feed,
+                run_for_sec=run_for_sec,
+            )
+        )
 
     return Settings(app=app, stations=stations)

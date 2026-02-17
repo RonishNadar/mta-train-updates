@@ -7,15 +7,19 @@
   },
   "stations": [
     {
-      "name": "Fort Hamilton Pkwy (N) Manhattan-bound",
+      "stop_name": "Fort Hamilton Pkwy (N)",
+      "gtfs_stop_id": "N03",
+      "direction": "N",
+      "direction_label": "Manhattan",
       "feed": "NQRW",
-      "stop_id": "R29N",
       "run_for_sec": 0
     },
     {
-      "name": "Fort Hamilton Pkwy (N) Brooklyn-bound",
+      "stop_name": "Fort Hamilton Pkwy (S)",
+      "gtfs_stop_id": "N03",
+      "direction": "S",
+      "direction_label": "Coney Island  ",
       "feed": "NQRW",
-      "stop_id": "R29S",
       "run_for_sec": 0
     }
   ]
