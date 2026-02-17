@@ -19,10 +19,6 @@ class LCDUI:
     COLS = 20
     ROWS = 4
 
-    # Charset modes for the 8 CGRAM custom chars
-    _CHARSET_NAV = "nav"   # arrows/heart + home icon
-    _CHARSET_BIG = "big"   # big time charset (digits + colon + home icon)
-
     def __init__(self, i2c_port: int = 1, i2c_address: int = 0x27):
         self.lcd = CharLCD(
             i2c_expander="PCF8574",
@@ -38,14 +34,13 @@ class LCDUI:
         # Cache previous lines to avoid rewriting the LCD constantly (I2C is slow)
         self._last_lines = [""] * self.ROWS
 
-        # Marquee state
         self._marquee_offset = 0
         self._last_marquee_tick = 0.0
 
-        # Track which charset is currently loaded
+        # Track which set of custom chars is loaded (CGRAM has only 8 slots)
         self._charset_mode: Optional[str] = None
 
-        # Load default nav charset (arrows/heart/home)
+        # Default to normal UI charset
         self._load_charset_nav()
 
     def close(self) -> None:
@@ -57,10 +52,14 @@ class LCDUI:
     # -------------------- CHARSETS --------------------
 
     def _load_charset_nav(self) -> None:
-        """Normal UI charset: Up, Down, Heart, Home."""
-        if self._charset_mode == self._CHARSET_NAV:
+        """
+        NAV charset:
+          0 up, 1 down, 2 heart, 3 home
+          4..7 unused
+        """
+        if self._charset_mode == "nav":
             return
-        self._charset_mode = self._CHARSET_NAV
+        self._charset_mode = "nav"
 
         up = [
             0b00100, 0b01110, 0b10101, 0b00100,
@@ -74,7 +73,6 @@ class LCDUI:
             0b00000, 0b01010, 0b11111, 0b11111,
             0b11111, 0b01110, 0b00100, 0b00000,
         ]
-        # simple home icon (fits in 5x8)
         home = [
             0b00100,
             0b01110,
@@ -86,136 +84,111 @@ class LCDUI:
             0b00000,
         ]
 
-        # 0=up, 1=down, 2=heart, 3=home
         self.lcd.create_char(0, up)
         self.lcd.create_char(1, down)
         self.lcd.create_char(2, heart)
         self.lcd.create_char(3, home)
 
-    def _load_charset_big(self) -> None:
+    def _load_charset_home(self) -> None:
         """
-        Big time charset (font: square_four) based on the provided C code.
-
-        Custom chars 0..7 correspond to:
-        square_four_00 .. square_four_07
+        HOME charset (NAV + weather icons):
+          0 up, 1 down, 2 heart, 3 home
+          4 sun, 5 cloud, 6 rain, 7 snow
         """
-        if self._charset_mode == self._CHARSET_BIG:
+        if self._charset_mode == "home":
             return
-        self._charset_mode = self._CHARSET_BIG
+        self._charset_mode = "home"
 
-        # Direct port of the C arrays:
-        # const byte square_four_00[8] = {B11111,B11111,B11100,B11100,B00000,B00000,B00000,B00000};
-        square_four_00 = [
+        up = [
+            0b00100, 0b01110, 0b10101, 0b00100,
+            0b00100, 0b00100, 0b00100, 0b00000,
+        ]
+        down = [
+            0b00100, 0b00100, 0b00100, 0b00100,
+            0b00100, 0b10101, 0b01110, 0b00100,
+        ]
+        heart = [
+            0b00000, 0b01010, 0b11111, 0b11111,
+            0b11111, 0b01110, 0b00100, 0b00000,
+        ]
+        home = [
+            0b00100,
+            0b01110,
             0b11111,
+            0b10101,
+            0b10101,
+            0b10101,
             0b11111,
-            0b11100,
-            0b11100,
+            0b00000,
+        ]
+
+        # Simple 5x8 weather icons
+        sun = [
+            0b00100,
+            0b10101,
+            0b01110,
+            0b11111,
+            0b01110,
+            0b10101,
+            0b00100,
+            0b00000,
+        ]
+        cloud = [
             0b00000,
             0b00000,
+            0b01110,
+            0b11111,
+            0b11111,
+            0b11111,
+            0b01110,
+            0b00000,
+        ]
+        rain = [
+            0b00000,
+            0b01110,
+            0b11111,
+            0b11111,
+            0b11111,
+            0b10101,
+            0b01010,
+            0b00000,
+        ]
+        snow = [
+            0b00000,
+            0b01010,
+            0b00100,
+            0b11111,
+            0b00100,
+            0b01010,
             0b00000,
             0b00000,
         ]
 
-        # const byte square_four_01[8] = {B00000,B00000,B00000,B00000,B11100,B11100,B11111,B11111};
-        square_four_01 = [
-            0b00000,
-            0b00000,
-            0b00000,
-            0b00000,
-            0b11100,
-            0b11100,
-            0b11111,
-            0b11111,
-        ]
-
-        # const byte square_four_02[8] = {B11111,B11111,B01111,B01111,B01111,B01111,B11111,B11111};
-        square_four_02 = [
-            0b11111,
-            0b11111,
-            0b01111,
-            0b01111,
-            0b01111,
-            0b01111,
-            0b11111,
-            0b11111,
-        ]
-
-        # const byte square_four_03[8] = {B11111,B11111,B11110,B11110,B11110,B11110,B11111,B11111};
-        square_four_03 = [
-            0b11111,
-            0b11111,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11111,
-            0b11111,
-        ]
-
-        # const byte square_four_04[8] = {B00001,B00011,B00111,B01111,B00000,B00000,B00000,B00000};
-        square_four_04 = [
-            0b00001,
-            0b00011,
-            0b00111,
-            0b01111,
-            0b00000,
-            0b00000,
-            0b00000,
-            0b00000,
-        ]
-
-        # const byte square_four_05[8] = {B11110,B11110,B11110,B11110,B11110,B11110,B11110,B11110};
-        square_four_05 = [
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-        ]
-
-        # const byte square_four_06[8] = {B11111,B11111,B00000,B00000,B00000,B00000,B11111,B11111};
-        square_four_06 = [
-            0b11111,
-            0b11111,
-            0b00000,
-            0b00000,
-            0b00000,
-            0b00000,
-            0b11111,
-            0b11111,
-        ]
-
-        # const byte square_four_07[8] = {B11110,B11110,B11110,B11110,B11110,B11110,B11111,B11111};
-        square_four_07 = [
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11110,
-            0b11111,
-            0b11111,
-        ]
-
-        # Load into CGRAM slots 0..7
-        self.lcd.create_char(0, square_four_00)
-        self.lcd.create_char(1, square_four_01)
-        self.lcd.create_char(2, square_four_02)
-        self.lcd.create_char(3, square_four_03)
-        self.lcd.create_char(4, square_four_04)
-        self.lcd.create_char(5, square_four_05)
-        self.lcd.create_char(6, square_four_06)
-        self.lcd.create_char(7, square_four_07)
-
+        self.lcd.create_char(0, up)
+        self.lcd.create_char(1, down)
+        self.lcd.create_char(2, heart)
+        self.lcd.create_char(3, home)
+        self.lcd.create_char(4, sun)
+        self.lcd.create_char(5, cloud)
+        self.lcd.create_char(6, rain)
+        self.lcd.create_char(7, snow)
 
     # -------------------- HELPERS --------------------
 
     @staticmethod
     def _pad(s: str, width: int) -> str:
         return (s[:width] + (" " * width))[:width]
+
+    def _write_lines(self, lines: List[str]) -> None:
+        # Normalize to exactly 4 padded lines
+        norm = [self._pad(lines[i], self.COLS) for i in range(self.ROWS)]
+
+        # Write only lines that changed
+        for r in range(self.ROWS):
+            if norm[r] != self._last_lines[r]:
+                self.lcd.cursor_pos = (r, 0)
+                self.lcd.write_string(norm[r])
+                self._last_lines[r] = norm[r]
 
     def _marquee_18(self, text: str, tick_s: float = 0.35) -> str:
         now = time.time()
@@ -235,98 +208,78 @@ class LCDUI:
 
     @staticmethod
     def _arrow_char(direction: str) -> str:
-        # nav charset: 0=up, 1=down
         return chr(0) if direction.upper() == "N" else chr(1)
 
     @staticmethod
     def _heart_char() -> str:
-        # nav charset: 2=heart
         return chr(2)
 
     @staticmethod
-    def _home_char_nav() -> str:
-        # nav charset: 3=home
+    def _home_char() -> str:
         return chr(3)
 
-    # -------------------- BIG TIME --------------------
-
-    def _big_digit(self, d: str) -> List[str]:
+    @staticmethod
+    def _weather_icon_kind(kind: str) -> str:
         """
-        square_four font digit:
-        returns [row0, row1], each is 2 characters wide.
-        Uses Arduino mapping:
-        square_four_digits[10][4] =
-        {
-            {255,255,3,2}, {4,5,254,5}, {6,2,3,6}, {0,2,1,2}, {7,1,254,5},
-            {3,6,6,2}, {3,6,3,2}, {0,2,254,5}, {3,2,3,2}, {3,2,6,2}
-        }
-        Where:
-        255 = full block (use chr(255))
-        254 = empty (use space)
-        0..7 = custom chars (use chr(n))
+        Maps weather kind -> custom char.
+        slots: 4 sun, 5 cloud, 6 rain, 7 snow
         """
-        # digit tile table from Arduino code
-        # order: [top-left, top-right, bottom-left, bottom-right]
-        square_four_digits = {
-            "0": (255, 255, 3, 2),
-            "1": (4, 5, 254, 5),
-            "2": (6, 2, 3, 6),
-            "3": (0, 2, 1, 2),
-            "4": (7, 1, 254, 5),
-            "5": (3, 6, 6, 2),
-            "6": (3, 6, 3, 2),
-            "7": (0, 2, 254, 5),
-            "8": (3, 2, 3, 2),
-            "9": (3, 2, 6, 2),
-        }
+        k = (kind or "").lower()
+        if "sun" in k or "clear" in k:
+            return chr(4)
+        if "snow" in k or "sleet" in k:
+            return chr(7)
+        if "rain" in k or "shower" in k or "drizzle" in k or "storm" in k:
+            return chr(6)
+        # default
+        return chr(5)
 
-        tiles = square_four_digits.get(str(d), (254, 254, 254, 254))
-        tl, tr, bl, br = tiles
-
-        def to_char(v: int) -> str:
-            if v == 254:
-                return " "          # empty
-            if v == 255:
-                return chr(255)     # full block in HD44780 ROM
-            return chr(v)           # custom char 0..7
-
-        row0 = to_char(tl) + to_char(tr)
-        row1 = to_char(bl) + to_char(br)
-        return [row0, row1]
-
+    @staticmethod
+    def _fmt_int_or_dash(x: Optional[float]) -> str:
+        if x is None:
+            return "--"
+        return str(int(round(x)))
 
     # -------------------- RENDERERS --------------------
 
-    def render_home(self, page_idx: int) -> None:
-        self._load_charset_big()
+    def render_home(
+        self,
+        page_idx: int,
+        weather_kind: str,
+        weather_text: str,
+        pop_pct: Optional[int],
+        temp_f: Optional[float],
+        feels_f: Optional[float],
+    ) -> None:
+        """
+        Home page:
+          Row1: [icon] Condition  PoP:XX%
+          Row2: T:xxF  Feels:yyF
+          Row3: blank (future)
+          Row4: HH:MM + < home >
+        """
+        self._load_charset_home()
 
-        hhmm = time.strftime("%H:%M")  # note the colon included
-        # Format: "HH:MM"
-        H1, H2, _, M1, M2 = hhmm[0], hhmm[1], hhmm[2], hhmm[3], hhmm[4]
+        icon = self._weather_icon_kind(weather_kind)
+        cond = (weather_text or "-").strip()
+        cond = cond[:10]  # keep short so line fits
 
-        d0 = self._big_digit(H1)
-        d1 = self._big_digit(H2)
-        d2 = self._big_digit(M1)
-        d3 = self._big_digit(M2)
+        pop = "--" if pop_pct is None else f"{int(pop_pct):02d}"
+        line1 = f"{icon} {cond}  PoP:{pop}%"
+        line1 = self._pad(line1, 20)
 
-        # Use normal ':' character between hours and minutes
-        # Total width: 2+2+1+2+2 = 9 chars
-        row0 = d0[0] + d1[0] + ":" + d2[0] + d3[0]
-        row1 = d0[1] + d1[1] + " " + d2[1] + d3[1]   # space aligns better than ':' on bottom row
+        t = self._fmt_int_or_dash(temp_f)
+        f = self._fmt_int_or_dash(feels_f)
+        line2 = self._pad(f"T:{t}F  Feels:{f}F", 20)
 
-        pad_left = max(0, (20 - len(row0)) // 2)
-        row0 = self._pad((" " * pad_left) + row0, 20)
-        row1 = self._pad((" " * pad_left) + row1, 20)
+        line3 = " " * 20
 
-        now_small = time.strftime("%H:%M")
-        # In square_four charset, slot 7 is NOT "home" anymore (it is square_four_07).
-        # So for bottom-right, use nav charset OR just show "< H >" with plain H.
-        # Best: keep it plain to avoid charset conflicts:
-        page = "< H >".rjust(5)
-        line4 = self._pad(now_small, 15) + self._pad(page, 5)
+        now = time.strftime("%H:%M")
+        home = self._home_char()
+        page = f"< {home} >".rjust(5)
+        line4 = self._pad(now, 15) + self._pad(page, 5)
 
-        self._write_lines([row0, row1, " " * 20, line4])
-
+        self._write_lines([line1, line2, line3, line4])
 
     def render_station(self, data: PageData, page_idx: int) -> None:
         self._load_charset_nav()
@@ -372,10 +325,6 @@ class LCDUI:
         self._write_lines(lines)
 
     def render_settings_menu(self, selected_idx: int, page_idx: int) -> None:
-        """
-        4 items across 3 lines (scroll window of 3).
-        Up/Down moves selection. Select enters.
-        """
         self._load_charset_nav()
 
         items = ["IP address", "Wi Fi", "Select stations", "About"]
@@ -433,13 +382,7 @@ class LCDUI:
         ]
         self._write_lines(lines)
 
-    def render_wifi_list_page(
-        self,
-        networks: List[str],
-        active_ssid: str,
-        selected_idx: int,
-        status: str = "",
-    ) -> None:
+    def render_wifi_list_page(self, networks: List[str], active_ssid: str, selected_idx: int, status: str = "") -> None:
         self._load_charset_nav()
 
         now = time.strftime("%H:%M")
@@ -460,6 +403,7 @@ class LCDUI:
         win = networks[start : start + 2]
 
         lines = [self._pad("Wi Fi:", 20)]
+
         for i in range(2):
             if i < len(win):
                 ssid = win[i]
@@ -477,7 +421,6 @@ class LCDUI:
         self._load_charset_nav()
 
         cursor = max(0, min(cursor, 15))
-
         shown = (password + (" " * 16))[:16]
         caret_line = " " * cursor + "^" + " " * (19 - cursor)
 
@@ -488,14 +431,3 @@ class LCDUI:
             self._pad("Sel=OK  L=Back", 20),
         ]
         self._write_lines(lines)
-
-    def _write_lines(self, lines: List[str]) -> None:
-        # Normalize to exactly 4 padded lines
-        norm = [self._pad(lines[i], self.COLS) for i in range(self.ROWS)]
-
-        # Write only lines that changed
-        for r in range(self.ROWS):
-            if norm[r] != self._last_lines[r]:
-                self.lcd.cursor_pos = (r, 0)
-                self.lcd.write_string(norm[r])
-                self._last_lines[r] = norm[r]

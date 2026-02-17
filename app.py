@@ -9,6 +9,7 @@ from mta_app.lcd_ui import LCDUI, PageData
 from mta_app.monitor import Monitor
 from mta_app.web_config import WebConfigServer
 from mta_app.wifi_manager import has_nmcli, get_active_ssid, scan_ssids, connect_wifi
+from mta_app.weather import WeatherWorker, c_to_f
 
 
 def get_local_ip() -> str:
@@ -121,7 +122,15 @@ def main() -> int:
         # ---------- RENDER ----------
         if state == STATE_MAIN:
             if page == 0:
-                lcd.render_home(page_idx=page)
+                ws = weather.get_snapshot()
+                lcd.render_home(
+                    page_idx=page,
+                    weather_kind=ws.condition_kind,
+                    weather_text=ws.condition_text,
+                    pop_pct=ws.pop_pct,
+                    temp_f=c_to_f(ws.temp_c),
+                    feels_f=c_to_f(ws.feels_like_c),
+                )
             elif page == last_page:
                 lcd.render_settings_landing(page_idx=page)
 
