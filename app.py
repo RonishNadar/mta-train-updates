@@ -152,16 +152,29 @@ def main() -> int:
                     leave_line = "Fav: (hold Select)"
                 else:
                     snap = mon.get_snapshot(favorite_station_index)
-                    etas = [eta for (_route, eta) in snap.arrivals if eta is not None]
+                    etas = sorted([eta for (_route, eta) in snap.arrivals if eta is not None])
+
                     if not etas:
                         leave_line = "Fav: no ETA"
                     else:
-                        next_eta = min(etas)
-                        leave_in = next_eta - int(leave_buffer_min)
+                        # Pick the first ETA that is >= leave_buffer_min.
+                        # If the first ETA is too soon, use the next one.
+                        chosen_eta = None
+                        for eta in etas:
+                            if eta >= leave_buffer_min:
+                                chosen_eta = eta
+                                break
+
+                        # If *all* ETAs are < buffer, fall back to the soonest one
+                        if chosen_eta is None:
+                            chosen_eta = etas[0]
+
+                        leave_in = chosen_eta - leave_buffer_min
                         if leave_in <= 0:
                             leave_line = "Leave now"
                         else:
                             leave_line = f"Leave in {leave_in:02d} min"
+
 
                 ws = weather.get_snapshot()
 
@@ -196,7 +209,8 @@ def main() -> int:
                     direction_label=st.direction_label,
                     arrivals=snap.arrivals,
                 )
-                lcd.render_station(data, page_idx=page)
+                is_fav = (favorite_station_index is not None) and ((page - 1) == favorite_station_index)
+                lcd.render_station(data, page_idx=page, is_favorite=is_fav)
 
         elif state == STATE_SETTINGS_ROOT:
             lcd.render_settings_menu(selected_idx=settings_sel, page_idx=page)

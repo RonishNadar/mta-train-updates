@@ -353,7 +353,7 @@ class LCDUI:
 
         self._write_lines([line1, line2, line3, line4])
 
-    def render_station(self, data: PageData, page_idx: int) -> None:
+    def render_station(self, data: PageData, page_idx: int, is_favorite: bool = False) -> None:
         self._load_charset_nav()
 
         name18 = self._marquee_18(data.stop_name)
@@ -373,11 +373,30 @@ class LCDUI:
         line2 = fmt_line(0)
         line3 = fmt_line(1)
 
+        # Row 4: time left, page right; plus heart at col 14 if favorite
         now = time.strftime("%H:%M")
-        page = f"< {page_idx} >".rjust(5)
-        line4 = self._pad(now, 15) + self._pad(page, 5)
+        page_str = f"< {page_idx} >".rjust(5)
+
+        # Start with 20 spaces, then place time at col1, heart at col14, page at col16
+        row4 = list(" " * 20)
+
+        # time at col1 (positions 1..5)
+        for i, ch in enumerate(now[:5]):
+            row4[i] = ch
+
+        # heart at col14 (index 13)
+        if is_favorite:
+            row4[13] = self._heart_char()
+
+        # page at col16..20 (index 15..19)
+        page_part = page_str[-5:]
+        for i, ch in enumerate(page_part):
+            row4[15 + i] = ch
+
+        line4 = "".join(row4)
 
         self._write_lines([line1, line2, line3, line4])
+
 
     # -------- SETTINGS HUB + SUBPAGES --------
 
