@@ -94,69 +94,122 @@ class LCDUI:
 
     def _load_charset_big(self) -> None:
         """
-        Big time charset:
-          0..5 = big digit blocks
-          6    = colon
-          7    = home icon (for < H > on home page)
+        Big time charset (font: square_four) based on the provided C code.
+
+        Custom chars 0..7 correspond to:
+        square_four_00 .. square_four_07
         """
         if self._charset_mode == self._CHARSET_BIG:
             return
         self._charset_mode = self._CHARSET_BIG
 
-        # Big digit blocks (2-row)
-        ul = [
-            0b11111, 0b11111, 0b11000, 0b11000,
-            0b11000, 0b11000, 0b11000, 0b11000,
-        ]
-        um = [
-            0b11111, 0b11111, 0b00000, 0b00000,
-            0b00000, 0b00000, 0b00000, 0b00000,
-        ]
-        ur = [
-            0b11111, 0b11111, 0b00011, 0b00011,
-            0b00011, 0b00011, 0b00011, 0b00011,
-        ]
-        ll = [
-            0b11000, 0b11000, 0b11000, 0b11000,
-            0b11000, 0b11000, 0b11111, 0b11111,
-        ]
-        lm = [
-            0b00000, 0b00000, 0b00000, 0b00000,
-            0b00000, 0b00000, 0b11111, 0b11111,
-        ]
-        lr = [
-            0b00011, 0b00011, 0b00011, 0b00011,
-            0b00011, 0b00011, 0b11111, 0b11111,
-        ]
-        colon = [
-            0b00000,
-            0b00100,
-            0b00100,
-            0b00000,
-            0b00000,
-            0b00100,
-            0b00100,
-            0b00000,
-        ]
-        home = [
-            0b00100,
-            0b01110,
+        # Direct port of the C arrays:
+        # const byte square_four_00[8] = {B11111,B11111,B11100,B11100,B00000,B00000,B00000,B00000};
+        square_four_00 = [
             0b11111,
-            0b10101,
-            0b10101,
-            0b10101,
             0b11111,
+            0b11100,
+            0b11100,
+            0b00000,
+            0b00000,
+            0b00000,
             0b00000,
         ]
 
-        self.lcd.create_char(0, ul)
-        self.lcd.create_char(1, um)
-        self.lcd.create_char(2, ur)
-        self.lcd.create_char(3, ll)
-        self.lcd.create_char(4, lm)
-        self.lcd.create_char(5, lr)
-        self.lcd.create_char(6, colon)
-        self.lcd.create_char(7, home)
+        # const byte square_four_01[8] = {B00000,B00000,B00000,B00000,B11100,B11100,B11111,B11111};
+        square_four_01 = [
+            0b00000,
+            0b00000,
+            0b00000,
+            0b00000,
+            0b11100,
+            0b11100,
+            0b11111,
+            0b11111,
+        ]
+
+        # const byte square_four_02[8] = {B11111,B11111,B01111,B01111,B01111,B01111,B11111,B11111};
+        square_four_02 = [
+            0b11111,
+            0b11111,
+            0b01111,
+            0b01111,
+            0b01111,
+            0b01111,
+            0b11111,
+            0b11111,
+        ]
+
+        # const byte square_four_03[8] = {B11111,B11111,B11110,B11110,B11110,B11110,B11111,B11111};
+        square_four_03 = [
+            0b11111,
+            0b11111,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11111,
+            0b11111,
+        ]
+
+        # const byte square_four_04[8] = {B00001,B00011,B00111,B01111,B00000,B00000,B00000,B00000};
+        square_four_04 = [
+            0b00001,
+            0b00011,
+            0b00111,
+            0b01111,
+            0b00000,
+            0b00000,
+            0b00000,
+            0b00000,
+        ]
+
+        # const byte square_four_05[8] = {B11110,B11110,B11110,B11110,B11110,B11110,B11110,B11110};
+        square_four_05 = [
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+        ]
+
+        # const byte square_four_06[8] = {B11111,B11111,B00000,B00000,B00000,B00000,B11111,B11111};
+        square_four_06 = [
+            0b11111,
+            0b11111,
+            0b00000,
+            0b00000,
+            0b00000,
+            0b00000,
+            0b11111,
+            0b11111,
+        ]
+
+        # const byte square_four_07[8] = {B11110,B11110,B11110,B11110,B11110,B11110,B11111,B11111};
+        square_four_07 = [
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11110,
+            0b11111,
+            0b11111,
+        ]
+
+        # Load into CGRAM slots 0..7
+        self.lcd.create_char(0, square_four_00)
+        self.lcd.create_char(1, square_four_01)
+        self.lcd.create_char(2, square_four_02)
+        self.lcd.create_char(3, square_four_03)
+        self.lcd.create_char(4, square_four_04)
+        self.lcd.create_char(5, square_four_05)
+        self.lcd.create_char(6, square_four_06)
+        self.lcd.create_char(7, square_four_07)
+
 
     # -------------------- HELPERS --------------------
 
