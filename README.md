@@ -1,23 +1,3 @@
-This is a **fantastic hardware + software system** — it absolutely deserves a polished README.
-
-Below is a **production-grade README.md** you can paste directly into your repo.
-It includes:
-
-* Project overview
-* Features
-* Hardware list
-* Wiring table (Pi Zero 2W + LCD + buttons)
-* Installation steps
-* Setup instructions
-* How to run
-* Settings.json explanation
-* Screenshots section placeholder
-* System architecture
-
-You can copy this as your `README.md`.
-
----
-
 # 🗽 MTA Train Updates Display (Raspberry Pi + 20x4 LCD)
 
 Real-time NYC subway arrival display built using:
