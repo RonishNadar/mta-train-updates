@@ -269,7 +269,7 @@ Displays:
 
 If you want the app to start automatically when the Raspberry Pi boots, you can create a **systemd service**.
 
-> Note: This assumes your virtual environment is in **`/home/pi/.venv`** and the repo is in **`/home/pi/github/mta-train-updates`**.
+> Note: This assumes your virtual environment is in **`/home/pi/github/.venv`** and the repo is in **`/home/pi/github/mta-train-updates`**.
 
 ## 1️⃣ Create the service file
 
