@@ -290,7 +290,7 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/github/mta-train-updates
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/pi/.venv/bin/python /home/pi/github/mta-train-updates/app.py
+ExecStart=/<code-directory>/.venv/bin/python /<code-directory>/mta-train-updates/app.py
 Restart=always
 RestartSec=2
 
