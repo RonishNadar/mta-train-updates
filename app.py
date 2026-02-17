@@ -128,7 +128,7 @@ def main() -> int:
         if state == STATE_MAIN:
             if page == 0:
                 ws = weather.get_snapshot()
-                unit = settings.temp_unit  # "C" or "F"
+                unit = settings.app.temp_unit  # "C" or "F"
                 if unit == "F":
                     temp_val = c_to_f(ws.temp_c)
                     feels_val = c_to_f(ws.feels_like_c)
