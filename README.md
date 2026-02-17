@@ -265,6 +265,91 @@ Displays:
 
 ---
 
+# 🔁 Auto-start on Boot (Optional: systemd)
+
+If you want the app to start automatically when the Raspberry Pi boots, you can create a **systemd service**.
+
+> Note: This assumes your virtual environment is in **`/home/pi/.venv`** and the repo is in **`/home/pi/github/mta-train-updates`**.
+
+## 1️⃣ Create the service file
+
+```bash
+sudo nano /etc/systemd/system/mta-train-updates.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=MTA Train Updates LCD App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/github/mta-train-updates
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/.venv/bin/python /home/pi/github/mta-train-updates/app.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save and exit.
+
+## 2️⃣ Enable and start
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable mta-train-updates.service
+sudo systemctl start mta-train-updates.service
+```
+
+## 3️⃣ Check status / logs
+
+```bash
+sudo systemctl status mta-train-updates.service
+journalctl -u mta-train-updates.service -f
+```
+
+## 4️⃣ Reboot test
+
+```bash
+sudo reboot
+```
+
+## Optional: add a startup delay (if WiFi isn’t ready)
+
+Edit the service:
+
+```bash
+sudo nano /etc/systemd/system/mta-train-updates.service
+```
+
+Add this line inside `[Service]`:
+
+```ini
+ExecStartPre=/bin/sleep 5
+```
+
+Then reload + restart:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart mta-train-updates.service
+```
+
+## Disable auto-start (if needed)
+
+```bash
+sudo systemctl disable --now mta-train-updates.service
+```
+
+---
+
 # 📸 Screenshots
 
 (Add photos here)
