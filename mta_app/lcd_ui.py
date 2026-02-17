@@ -129,7 +129,7 @@ class LCDUI:
         page = f"< {heart} >".rjust(5)
 
         lines = [
-            self._pad("Settings", 20),
+            self._pad("Settings:", 20),
             self._pad("Press Select", 20),
             self._pad("L/R: Pages", 20),
             self._pad(now, 15) + self._pad(page, 5),
@@ -149,7 +149,7 @@ class LCDUI:
         start = max(0, min(selected_idx - 1, len(items) - 3))
         window = items[start : start + 3]
 
-        lines = [self._pad("> Settings", 20)]
+        lines = [self._pad("Settings:", 20)]
         for i, label in enumerate(window):
             abs_idx = start + i
             prefix = ">" if abs_idx == selected_idx else " "
