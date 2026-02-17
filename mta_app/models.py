@@ -1,7 +1,7 @@
 # mta_app/models.py
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass(frozen=True)
@@ -11,6 +11,8 @@ class AppConfig:
     run_for_sec: int
     http_timeout_sec: int
     temp_unit: str = "C"
+    leave_buffer_min: int = 10
+    favorite_station_index: Optional[int] = None
 
 
 @dataclass(frozen=True)

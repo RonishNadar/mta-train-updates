@@ -11,6 +11,17 @@ from mta_app.web_config import WebConfigServer
 from mta_app.wifi_manager import has_nmcli, get_active_ssid, scan_ssids, connect_wifi
 from mta_app.weather import WeatherWorker, c_to_f
 
+import json
+from pathlib import Path
+
+def save_app_fields_to_settings(path: str, *, favorite_station_index, leave_buffer_min, temp_unit) -> None:
+    p = Path(path)
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    raw.setdefault("app", {})
+    raw["app"]["favorite_station_index"] = favorite_station_index
+    raw["app"]["leave_buffer_min"] = int(leave_buffer_min)
+    raw["app"]["temp_unit"] = str(temp_unit).upper()
+    p.write_text(json.dumps(raw, indent=2), encoding="utf-8")
 
 def get_local_ip() -> str:
     """
@@ -35,6 +46,7 @@ STATE_IP = "IP"
 STATE_WIFI_LIST = "WIFI_LIST"
 STATE_WIFI_PASS = "WIFI_PASS"
 STATE_WEB = "WEB"
+STATE_BUFFER = "BUFFER"
 STATE_ABOUT = "ABOUT"
 
 
@@ -93,6 +105,8 @@ def main() -> int:
     wifi_scan_status = ""
     wifi_scan_thread: threading.Thread | None = None
 
+    leave_buffer_min = settings.app.leave_buffer_min
+
     def start_wifi_scan() -> None:
         nonlocal wifi_scanning, wifi_scan_status, wifi_ssids, wifi_active, wifi_sel, wifi_scan_thread
         if wifi_scanning or not wifi_supported:
@@ -127,14 +141,33 @@ def main() -> int:
         # ---------- RENDER ----------
         if state == STATE_MAIN:
             if page == 0:
+                leave_line = ""
+                fav = settings.app.favorite_station_index
+                if fav is None:
+                    leave_line = "Fav: (hold Select)"
+                else:
+                    snap = mon.get_snapshot(fav)
+                    etas = [eta for (_route, eta) in snap.arrivals if eta is not None]
+                    if not etas:
+                        leave_line = "Fav: no ETA"
+                    else:
+                        next_eta = min(etas)
+                        leave_in = next_eta - int(settings.app.leave_buffer_min)
+                        if leave_in <= 0:
+                            leave_line = "Leave now"
+                        else:
+                            leave_line = f"Leave in {leave_in:02d} min"
+
+                unit = settings.app.temp_unit
                 ws = weather.get_snapshot()
-                unit = settings.app.temp_unit  # "C" or "F"
+
                 if unit == "F":
                     temp_val = c_to_f(ws.temp_c)
                     feels_val = c_to_f(ws.feels_like_c)
                 else:
                     temp_val = ws.temp_c
                     feels_val = ws.feels_like_c
+
                 lcd.render_home(
                     page_idx=page,
                     weather_kind=ws.condition_kind,
@@ -143,6 +176,7 @@ def main() -> int:
                     temp_val=temp_val,
                     feels_val=feels_val,
                     temp_unit=unit,
+                    leave_line=leave_line,
                 )
             elif page == last_page:
                 lcd.render_settings_landing(page_idx=page)
@@ -174,6 +208,9 @@ def main() -> int:
         elif state == STATE_WEB:
             url = f"{ip}:8088"
             lcd.render_web_config_page(url=url)
+        
+        elif state == STATE_BUFFER:
+            lcd.render_leave_buffer_page(settings.app.leave_buffer_min)
 
         elif state == STATE_ABOUT:
             lcd.render_about_page()
@@ -214,14 +251,29 @@ def main() -> int:
                             state_changed = True
                         else:
                             mon.force_refresh()
+                    
+                    elif k == "SELECT_LONG":
+                        # only when on a station page
+                        if 1 <= page <= station_count:
+                            fav_idx = page - 1
+                            settings.app.favorite_station_index = fav_idx
+                            save_app_fields_to_settings(
+                                "settings.json",
+                                favorite_station_index=settings.app.favorite_station_index,
+                                leave_buffer_min=settings.app.leave_buffer_min,
+                                temp_unit=settings.app.temp_unit,
+                            )
+                            print(f"[Fav] Set favorite station index = {fav_idx} ({settings.stations[fav_idx].stop_name})")
+                            state_changed = True
+
 
                 # ---------- SETTINGS ROOT ----------
                 elif state == STATE_SETTINGS_ROOT:
                     if k == "UP":
-                        settings_sel = (settings_sel - 1) % 4
+                        settings_sel = (settings_sel - 1) % 5
                         state_changed = True
                     elif k == "DOWN":
-                        settings_sel = (settings_sel + 1) % 4
+                        settings_sel = (settings_sel + 1) % 5
                         state_changed = True
 
                     elif k == "LEFT":
@@ -241,12 +293,34 @@ def main() -> int:
                         elif settings_sel == 2:
                             state = STATE_WEB
                         elif settings_sel == 3:
+                            state = STATE_BUFFER
+                        elif settings_sel == 4:
                             state = STATE_ABOUT
                         state_changed = True
 
                 # ---------- IP PAGE ----------
                 elif state == STATE_IP:
                     if k == "LEFT":
+                        state = STATE_SETTINGS_ROOT
+                        state_changed = True
+
+                elif state == STATE_BUFFER:
+                    if k == "UP":
+                        settings.app.leave_buffer_min = min(60, settings.app.leave_buffer_min + 1)
+                        state_changed = True
+                    elif k == "DOWN":
+                        settings.app.leave_buffer_min = max(0, settings.app.leave_buffer_min - 1)
+                        state_changed = True
+                    elif k == "LEFT":
+                        state = STATE_SETTINGS_ROOT
+                        state_changed = True
+                    elif k == "SELECT":
+                        save_app_fields_to_settings(
+                            "settings.json",
+                            favorite_station_index=settings.app.favorite_station_index,
+                            leave_buffer_min=settings.app.leave_buffer_min,
+                            temp_unit=settings.app.temp_unit,
+                        )
                         state = STATE_SETTINGS_ROOT
                         state_changed = True
 

@@ -250,7 +250,8 @@ class LCDUI:
         pop_pct: Optional[int],
         temp_val: Optional[float],
         feels_val: Optional[float],
-        temp_unit: str,  # "C" or "F"
+        temp_unit: str,
+        leave_line: str,
     ) -> None:
         """
         Layout requirements (1-indexed columns):
@@ -343,7 +344,7 @@ class LCDUI:
         line2 = "".join(row2)
 
         # ---------- row 3 ----------
-        line3 = " " * 20
+        line3 = self._pad(leave_line or "", 20)
 
         # ---------- row 4 ----------
         now = time.strftime("%H:%M")
@@ -398,7 +399,7 @@ class LCDUI:
     def render_settings_menu(self, selected_idx: int, page_idx: int) -> None:
         self._load_charset_nav()
 
-        items = ["IP address", "Wi Fi", "Select stations", "About"]
+        items = ["IP address", "Wi Fi", "Select stations", "Leave buffer", "About"]
         selected_idx = max(0, min(selected_idx, len(items) - 1))
 
         start = max(0, min(selected_idx - 1, len(items) - 3))
@@ -428,6 +429,18 @@ class LCDUI:
             self._pad(now, 20),
         ]
         self._write_lines(lines)
+
+    def render_leave_buffer_page(self, buffer_min: int) -> None:
+        self._load_charset_nav()
+        now = time.strftime("%H:%M")
+        lines = [
+            self._pad("Leave buffer:", 20),
+            self._pad(f"{buffer_min:2d} min before train", 20),
+            self._pad("Up/Down change", 20),
+            self._pad(now, 20),
+        ]
+        self._write_lines(lines)
+
 
     def render_about_page(self) -> None:
         self._load_charset_nav()
