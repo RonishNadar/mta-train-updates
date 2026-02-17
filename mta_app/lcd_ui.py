@@ -271,30 +271,30 @@ class LCDUI:
                     line[i] = ch
                 i += 1
 
-        def fmt_signed3(v: Optional[float]) -> str:
+        def fmt_signed2(v: Optional[float]) -> str:
             """
-            Returns exactly 3 characters:
-            None -> '---'
-            1  -> ' 01'
-            -3  -> '-03'
-            20  -> ' 20'
-            105 -> '105'
-            Clamps beyond -99..999 visually.
+            Always returns 3 characters:
+            None -> ' ---' style choice (here: ' --')
+            1    -> ' 01'
+            -3    -> '-03'
+            20    -> ' 20'
+            105   -> ' 99' (clamped)
             """
             if v is None:
-                return "---"
+                return " --"  # 3 chars
+
             n = int(round(v))
-            # clamp to keep it displayable in 3 chars
+
+            # Clamp to range that fits '-99' .. ' 99'
             if n < -99:
                 n = -99
-            if n > 999:
-                n = 999
+            if n > 99:
+                n = 99
 
             if n < 0:
-                return f"-{abs(n):02d}"   # -03
-            if n < 100:
-                return f"{n:3d}"          # '  1' or ' 20' or ' 99'
-            return f"{n:3d}"              # '105'
+                return f"-{abs(n):02d}"  # -03
+            return f" {n:02d}"          #  01,  20
+
 
         unit = (temp_unit or "C").upper()
         unit = "F" if unit == "F" else "C"
@@ -326,8 +326,8 @@ class LCDUI:
         # ---------- row 2 ----------
         row2 = list(" " * 20)
 
-        t3 = fmt_signed3(temp_val)
-        f3 = fmt_signed3(feels_val)
+        t3 = fmt_signed2(temp_val)
+        f3 = fmt_signed2(feels_val)
 
         # Build: "Temp.:" + 3 + unit + " Feel:" + 3 + unit
         # Columns:
@@ -404,7 +404,7 @@ class LCDUI:
         start = max(0, min(selected_idx - 1, len(items) - 3))
         window = items[start : start + 3]
 
-        lines = [self._pad("> Settings", 20)]
+        lines = [self._pad("Settings:", 20)]
         for i, label in enumerate(window):
             abs_idx = start + i
             prefix = ">" if abs_idx == selected_idx else " "
