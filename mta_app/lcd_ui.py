@@ -123,6 +123,20 @@ class LCDUI:
 
     # -------- SETTINGS HUB + SUBPAGES --------
 
+    def render_settings_landing(self, page_idx: int) -> None:
+        now = time.strftime("%H:%M")
+        heart = self._heart_char()
+        page = f"< {heart} >".rjust(5)
+
+        lines = [
+            self._pad("Settings", 20),
+            self._pad("Press Select", 20),
+            self._pad("L/R: Pages", 20),
+            self._pad(now, 15) + self._pad(page, 5),
+        ]
+        self._write_lines(lines)
+
+
     def render_settings_menu(self, selected_idx: int, page_idx: int) -> None:
         """
         4 items across 3 lines (scroll window of 3).
@@ -135,7 +149,7 @@ class LCDUI:
         start = max(0, min(selected_idx - 1, len(items) - 3))
         window = items[start : start + 3]
 
-        lines = [self._pad("Settings:", 20)]
+        lines = [self._pad("> Settings", 20)]
         for i, label in enumerate(window):
             abs_idx = start + i
             prefix = ">" if abs_idx == selected_idx else " "

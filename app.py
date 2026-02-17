@@ -123,7 +123,8 @@ def main() -> int:
             if page == 0:
                 lcd.render_home(page_idx=page)
             elif page == last_page:
-                lcd.render_settings_menu(selected_idx=settings_sel, page_idx=page)
+                lcd.render_settings_landing(page_idx=page)
+
             else:
                 st = settings.stations[page - 1]
                 snap = mon.get_snapshot(page - 1)
