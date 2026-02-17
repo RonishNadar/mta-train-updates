@@ -15,15 +15,14 @@ class AppConfig:
 @dataclass(frozen=True)
 class StationConfig:
     stop_name: str
-    gtfs_stop_id: str      # base id, e.g. "N03"
-    direction: str         # "N" or "S"
-    direction_label: str   # e.g. "Manhattan"
-    feed: str              # e.g. "NQRW"
-    run_for_sec: int       # 0 => inherit from app
+    gtfs_stop_id: str
+    direction: str
+    direction_label: str
+    feed: str
+    run_for_sec: int
 
     @property
     def rt_stop_id(self) -> str:
-        # realtime stop_id used in GTFS-RT feed, e.g. "N03N"
         return f"{self.gtfs_stop_id}{self.direction}"
 
 
