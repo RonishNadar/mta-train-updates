@@ -253,56 +253,98 @@ class LCDUI:
         temp_unit: str,  # "C" or "F"
     ) -> None:
         """
-        Home page target format:
-        Row1: [icon] Overcast PoP:  02%
-        Row2: Temp.:-20C Feel:-04C
-        Row3: blank
-        Row4: HH:MM + < home >
+        Layout requirements (1-indexed columns):
+        1) icon at row1 col1
+        2) condition text at row1 col3
+        3) PoP starts at row1 col12  (col 12..)
+        4) Temp value is width=3 (with sign if needed) -> " 01", "-03", "120"
+        5) Feel value is width=3 same as temp
         """
         self._load_charset_home()
 
-        icon = self._weather_icon_kind(weather_kind)
+        # ---------- helpers ----------
+        def put(line: List[str], col1: int, s: str) -> None:
+            """Place string s at 1-indexed column col1 into a 20-char line buffer."""
+            i = col1 - 1
+            for ch in s:
+                if 0 <= i < 20:
+                    line[i] = ch
+                i += 1
 
-        # Row1
-        cond = (weather_text or "-").strip()
-        cond = cond[:10]  # keep similar to your example
+        def fmt_signed3(v: Optional[float]) -> str:
+            """
+            Returns exactly 3 characters:
+            None -> '---'
+            1  -> ' 01'
+            -3  -> '-03'
+            20  -> ' 20'
+            105 -> '105'
+            Clamps beyond -99..999 visually.
+            """
+            if v is None:
+                return "---"
+            n = int(round(v))
+            # clamp to keep it displayable in 3 chars
+            if n < -99:
+                n = -99
+            if n > 999:
+                n = 999
 
-        # Pop shown as 2 digits, aligned like: "PoP:  02%"
-        if pop_pct is None:
-            pop2 = "--"
-        else:
-            pop2 = f"{int(pop_pct) % 100:02d}"
-        line1 = f"{icon} {cond} PoP:{pop2:>4}%"
-        line1 = self._pad(line1, 20)
+            if n < 0:
+                return f"-{abs(n):02d}"   # -03
+            if n < 100:
+                return f"{n:3d}"          # '  1' or ' 20' or ' 99'
+            return f"{n:3d}"              # '105'
 
-        # Row2: Temp.:-20C Feel:-04C  (exactly 20 chars ideally)
         unit = (temp_unit or "C").upper()
         unit = "F" if unit == "F" else "C"
 
-        def fmt2(v: Optional[float]) -> str:
-            if v is None:
-                return "--"
-            n = int(round(v))
-            # render -04, 05, 20
-            if n < 0:
-                return f"-{abs(n):02d}"
-            return f"{n:02d}"
+        # ---------- row 1 ----------
+        row1 = list(" " * 20)
 
-        t = fmt2(temp_val)
-        f = fmt2(feels_val)
-        line2 = f"Temp.:{t}{unit} Feel:{f}{unit}"
-        line2 = self._pad(line2, 20)
+        icon = self._weather_icon_kind(weather_kind)
+        put(row1, 1, icon)               # col1
+        put(row1, 2, " ")                # col2 blank (so text starts at col3)
 
+        cond = (weather_text or "-").strip()
+        # Row1 col3..col11 is 9 chars max (since PoP begins at col12)
+        cond9 = cond[:9].ljust(9)
+        put(row1, 3, cond9)              # col3
+
+        # PoP starts at col12
+        pop = "--" if pop_pct is None else f"{int(pop_pct) % 100:02d}"
+        put(row1, 12, f"PoP:{pop}%")     # col12
+
+        line1 = "".join(row1)
+
+        # ---------- row 2 ----------
+        row2 = list(" " * 20)
+
+        t3 = fmt_signed3(temp_val)
+        f3 = fmt_signed3(feels_val)
+
+        # Build: "Temp.:" + 3 + unit + " Feel:" + 3 + unit
+        # Columns:
+        # Temp. starts at col1
+        put(row2, 1, "Temp.:")
+        put(row2, 7, t3)                 # immediately after "Temp.:"
+        put(row2, 10, unit)              # unit after 3 chars
+
+        put(row2, 12, "Feel:")
+        put(row2, 17, f3)
+        put(row2, 20, unit)
+
+        line2 = "".join(row2)
+
+        # ---------- row 3 ----------
         line3 = " " * 20
 
-        # Row4
+        # ---------- row 4 ----------
         now = time.strftime("%H:%M")
         home = self._home_char()
-        page = f"< {home} >".rjust(5)
-        line4 = self._pad(now, 15) + self._pad(page, 5)
+        line4 = self._pad(now, 15) + self._pad(f"< {home} >", 5)
 
         self._write_lines([line1, line2, line3, line4])
-
 
     def render_station(self, data: PageData, page_idx: int) -> None:
         self._load_charset_nav()
