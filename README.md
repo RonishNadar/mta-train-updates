@@ -350,9 +350,13 @@ sudo systemctl disable --now mta-train-updates.service
 
 ---
 
-# 📸 Screenshots
+# 📸 Images
 
-(Add photos here)
+<p float="left">
+  <img src="Images/home.jpeg" width="320" />
+  <img src="Images/station_fav.jpeg" width="320" />
+  <img src="Images/station_norm.jpeg" width="320" />
+</p>
 
 ---
 
