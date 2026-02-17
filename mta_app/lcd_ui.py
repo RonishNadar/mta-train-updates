@@ -312,8 +312,14 @@ class LCDUI:
         put(row1, 3, cond9)              # col3
 
         # PoP starts at col12
-        pop = "--" if pop_pct is None else f"{int(pop_pct) % 100:02d}"
-        put(row1, 12, f"PoP:{pop}%")     # col12
+        if pop_pct is None:
+            pop4 = "  --"          # 4 chars
+        else:
+            pop2 = f"{int(pop_pct):02d}"  # "01"
+            pop4 = pop2.rjust(4)          # "  01"
+
+        put(row1, 12, f"PoP:{pop4}%")
+
 
         line1 = "".join(row1)
 
