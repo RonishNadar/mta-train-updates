@@ -58,6 +58,11 @@ def main() -> int:
     websrv = WebConfigServer(port=8088)
     websrv.start()
 
+    # Weather background worker (Open-Meteo, no API key)
+    # Brooklyn default; change if you want
+    weather = WeatherWorker(lat=40.6782, lon=-73.9442, refresh_s=600)
+    weather.start()
+
     # Pages:
     # 0 = Home
     # 1..N = stations
@@ -344,6 +349,7 @@ def main() -> int:
     finally:
         try:
             websrv.stop()
+            weather.stop()
         except Exception:
             pass
         mon.stop()
