@@ -34,8 +34,13 @@ class LCDUI:
         # Cache previous lines to avoid rewriting the LCD constantly (I2C is slow)
         self._last_lines = [""] * self.ROWS
 
+        # Station-name marquee state
         self._marquee_offset = 0
         self._last_marquee_tick = 0.0
+
+        # Home weather-text marquee state (separate)
+        self._home_weather_offset = 0
+        self._home_weather_last_tick = 0.0
 
         # Track which set of custom chars is loaded (CGRAM has only 8 slots)
         self._charset_mode: Optional[str] = None
@@ -203,7 +208,37 @@ class LCDUI:
         gap = " " * 4
         scroll_text = text + gap
         start = self._marquee_offset
-        window = (scroll_text + scroll_text)[start : start + 18]
+        window = (scroll_text + scroll_text)[start: start + 18]
+        return window
+
+    def _marquee_window(
+        self,
+        text: str,
+        width: int,
+        *,
+        tick_s: float,
+        offset_attr: str,
+        last_attr: str,
+    ) -> str:
+        """
+        Generic marquee for a fixed-width window.
+        Uses instance attributes for offset + last tick so multiple marquees can coexist.
+        """
+        now = time.time()
+        if len(text) <= width:
+            setattr(self, offset_attr, 0)
+            return self._pad(text, width)
+
+        last = getattr(self, last_attr)
+        if now - last >= tick_s:
+            setattr(self, last_attr, now)
+            off = getattr(self, offset_attr)
+            setattr(self, offset_attr, (off + 1) % (len(text) + 4))
+
+        gap = " " * 4
+        scroll_text = text + gap
+        start = getattr(self, offset_attr)
+        window = (scroll_text + scroll_text)[start: start + width]
         return window
 
     @staticmethod
@@ -231,14 +266,7 @@ class LCDUI:
             return chr(7)
         if "rain" in k or "shower" in k or "drizzle" in k or "storm" in k:
             return chr(6)
-        # default
         return chr(5)
-
-    @staticmethod
-    def _fmt_int_or_dash(x: Optional[float]) -> str:
-        if x is None:
-            return "--"
-        return str(int(round(x)))
 
     # -------------------- RENDERERS --------------------
 
@@ -254,18 +282,15 @@ class LCDUI:
         leave_line: str,
     ) -> None:
         """
-        Layout requirements (1-indexed columns):
-        1) icon at row1 col1
-        2) condition text at row1 col3
-        3) PoP starts at row1 col12  (col 12..)
-        4) Temp value is width=3 (with sign if needed) -> " 01", "-03", "120"
-        5) Feel value is width=3 same as temp
+        Home layout:
+          Row1: [icon@col1] [text@col3..10 (8 chars marquee)] [PoP starts col12]
+          Row2: Temp/Feel fixed formatting
+          Row3: leave_line
+          Row4: time + < home >
         """
         self._load_charset_home()
 
-        # ---------- helpers ----------
         def put(line: List[str], col1: int, s: str) -> None:
-            """Place string s at 1-indexed column col1 into a 20-char line buffer."""
             i = col1 - 1
             for ch in s:
                 if 0 <= i < 20:
@@ -275,27 +300,22 @@ class LCDUI:
         def fmt_signed2(v: Optional[float]) -> str:
             """
             Always returns 3 characters:
-            None -> ' ---' style choice (here: ' --')
-            1    -> ' 01'
-            -3    -> '-03'
-            20    -> ' 20'
-            105   -> ' 99' (clamped)
+              None -> ' --'
+              1    -> ' 01'
+              -3   -> '-03'
+              20   -> ' 20'
+            Clamped to [-99..99].
             """
             if v is None:
-                return " --"  # 3 chars
-
+                return " --"
             n = int(round(v))
-
-            # Clamp to range that fits '-99' .. ' 99'
             if n < -99:
                 n = -99
             if n > 99:
                 n = 99
-
             if n < 0:
-                return f"-{abs(n):02d}"  # -03
-            return f" {n:02d}"          #  01,  20
-
+                return f"-{abs(n):02d}"
+            return f" {n:02d}"
 
         unit = (temp_unit or "C").upper()
         unit = "F" if unit == "F" else "C"
@@ -304,23 +324,26 @@ class LCDUI:
         row1 = list(" " * 20)
 
         icon = self._weather_icon_kind(weather_kind)
-        put(row1, 1, icon)               # col1
-        put(row1, 2, " ")                # col2 blank (so text starts at col3)
+        put(row1, 1, icon)   # col1
+        put(row1, 2, " ")    # col2 blank so text starts at col3
 
         cond = (weather_text or "-").strip()
-        # Row1 col3..col11 is 9 chars max (since PoP begins at col12)
-        cond9 = cond[:9].ljust(9)
-        put(row1, 3, cond9)              # col3
+        # Requirement: row1 col3..col10 (8 chars). Marquee if longer.
+        cond8 = self._marquee_window(
+            cond,
+            8,
+            tick_s=0.35,
+            offset_attr="_home_weather_offset",
+            last_attr="_home_weather_last_tick",
+        )
+        put(row1, 3, cond8)
 
-        # PoP starts at col12
+        # PoP starts at col12, with 4-space field for value
         if pop_pct is None:
-            pop4 = "  --"          # 4 chars
+            pop4 = "  --"
         else:
-            pop2 = f"{int(pop_pct):02d}"  # "01"
-            pop4 = pop2.rjust(4)          # "  01"
-
+            pop4 = f"{int(pop_pct):02d}".rjust(4)  # "  01"
         put(row1, 12, f"PoP:{pop4}%")
-
 
         line1 = "".join(row1)
 
@@ -330,12 +353,9 @@ class LCDUI:
         t3 = fmt_signed2(temp_val)
         f3 = fmt_signed2(feels_val)
 
-        # Build: "Temp.:" + 3 + unit + " Feel:" + 3 + unit
-        # Columns:
-        # Temp. starts at col1
         put(row2, 1, "Temp.:")
-        put(row2, 7, t3)                 # immediately after "Temp.:"
-        put(row2, 10, unit)              # unit after 3 chars
+        put(row2, 7, t3)
+        put(row2, 10, unit)
 
         put(row2, 12, "Feel:")
         put(row2, 17, f3)
@@ -373,22 +393,19 @@ class LCDUI:
         line2 = fmt_line(0)
         line3 = fmt_line(1)
 
-        # Row 4: time left, page right; plus heart at col 14 if favorite
         now = time.strftime("%H:%M")
         page_str = f"< {page_idx} >".rjust(5)
 
-        # Start with 20 spaces, then place time at col1, heart at col14, page at col16
         row4 = list(" " * 20)
 
-        # time at col1 (positions 1..5)
         for i, ch in enumerate(now[:5]):
             row4[i] = ch
 
-        # heart at col14 (index 13)
+        # Heart at col14 if favorite (index 13)
         if is_favorite:
             row4[13] = self._heart_char()
 
-        # page at col16..20 (index 15..19)
+        # Page at col16..20
         page_part = page_str[-5:]
         for i, ch in enumerate(page_part):
             row4[15 + i] = ch
@@ -396,7 +413,6 @@ class LCDUI:
         line4 = "".join(row4)
 
         self._write_lines([line1, line2, line3, line4])
-
 
     # -------- SETTINGS HUB + SUBPAGES --------
 
@@ -422,7 +438,7 @@ class LCDUI:
         selected_idx = max(0, min(selected_idx, len(items) - 1))
 
         start = max(0, min(selected_idx - 1, len(items) - 3))
-        window = items[start : start + 3]
+        window = items[start: start + 3]
 
         lines = [self._pad("Settings:", 20)]
         for i, label in enumerate(window):
@@ -460,7 +476,6 @@ class LCDUI:
         ]
         self._write_lines(lines)
 
-
     def render_about_page(self) -> None:
         self._load_charset_nav()
 
@@ -485,7 +500,13 @@ class LCDUI:
         ]
         self._write_lines(lines)
 
-    def render_wifi_list_page(self, networks: List[str], active_ssid: str, selected_idx: int, status: str = "") -> None:
+    def render_wifi_list_page(
+        self,
+        networks: List[str],
+        active_ssid: str,
+        selected_idx: int,
+        status: str = "",
+    ) -> None:
         self._load_charset_nav()
 
         now = time.strftime("%H:%M")
@@ -503,7 +524,7 @@ class LCDUI:
 
         selected_idx = max(0, min(selected_idx, len(networks) - 1))
         start = max(0, min(selected_idx, len(networks) - 2))
-        win = networks[start : start + 2]
+        win = networks[start: start + 2]
 
         lines = [self._pad("Wi Fi:", 20)]
 
