@@ -1,7 +1,7 @@
 {
   "app": {
     "poll_interval_sec": 20,
-    "print_limit": 2,
+    "print_limit": 10,
     "run_for_sec": 0,
     "http_timeout_sec": 8,
     "temp_unit": "C",
