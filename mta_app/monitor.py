@@ -13,7 +13,7 @@ from mta_app.models import Settings, StationConfig
 
 @dataclass
 class StationSnapshot:
-    # [(route_id, eta_min), ...] length 0..2
+    # [(route_id, eta_min), ...] length 0..print_limit
     arrivals: List[Tuple[str, Optional[int]]]
     last_ok_ts: float
     last_error: str
@@ -88,10 +88,16 @@ class Monitor:
                 now = int(time.time())
                 for idx, st in items:
                     arr = extract_arrivals(msg, st.rt_stop_id, now=now)
-                    top2 = [(a.route_id, a.eta_min) for a in arr[:2]]
+
+                    limit = int(self.settings.app.print_limit)
+                    if limit <= 0:
+                        limit = 2  # safety fallback
+
+                    top = [(a.route_id, a.eta_min) for a in arr[:limit]]
+
                     with self._lock:
                         self._snapshots[idx] = StationSnapshot(
-                            arrivals=top2,
+                            arrivals=top,
                             last_ok_ts=time.time(),
                             last_error="",
                         )
