@@ -91,6 +91,10 @@ def main() -> int:
     last_page = station_count + 1
     page = 0
 
+    # Per-station scroll offset for arrivals list (0 = show top 2)
+    station_scroll: dict[int, int] = {}   # key: station_index (0-based), val: offset
+    last_page_seen: int | None = None
+
     # Settings menu selection index: 0..4
     # ["IP address", "Wi Fi", "Select stations", "Leave buffer", "About"]
     state = STATE_MAIN
@@ -203,11 +207,22 @@ def main() -> int:
             else:
                 st = settings.stations[page - 1]
                 snap = mon.get_snapshot(page - 1)
+
+                st_idx = page - 1
+                off = station_scroll.get(st_idx, 0)
+                arr = snap.arrivals or []
+
+                # Clamp offset to valid range (so 2-line window stays valid)
+                max_off = max(0, len(arr) - 2)
+                if off > max_off:
+                    off = max_off
+                    station_scroll[st_idx] = off
+
                 data = PageData(
                     stop_name=st.stop_name,
                     direction=st.direction,
                     direction_label=st.direction_label,
-                    arrivals=snap.arrivals,
+                    arrivals=arr[off : off + 2],  # show window of 2
                 )
                 is_fav = (favorite_station_index is not None) and ((page - 1) == favorite_station_index)
                 lcd.render_station(data, page_idx=page, is_favorite=is_fav)
@@ -247,6 +262,13 @@ def main() -> int:
                 last_ip_refresh = now_t
 
             ev = buttons.pop_event()
+
+            # Reset scroll when you land on a station page (fresh view shows top 2)
+            if last_page_seen != page:
+                if 1 <= page <= station_count:
+                    station_scroll[page - 1] = 0
+                last_page_seen = page
+            
             state_changed = False
 
             if ev:
@@ -268,6 +290,24 @@ def main() -> int:
                             state_changed = True
                         else:
                             mon.force_refresh()
+                    
+                    elif k == "UP":
+                        if 1 <= page <= station_count:
+                            st_idx = page - 1
+                            off = station_scroll.get(st_idx, 0)
+                            station_scroll[st_idx] = max(0, off - 1)
+                            state_changed = True
+
+                    elif k == "DOWN":
+                        if 1 <= page <= station_count:
+                            st_idx = page - 1
+                            snap = mon.get_snapshot(st_idx)
+                            arr = snap.arrivals or []
+                            max_off = max(0, len(arr) - 2)
+                            off = station_scroll.get(st_idx, 0)
+                            station_scroll[st_idx] = min(max_off, off + 1)
+                            state_changed = True
+
 
                     elif k == "SELECT_LONG":
                         # only when on a station page
