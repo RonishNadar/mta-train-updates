@@ -156,28 +156,29 @@ def main() -> int:
                     leave_line = "Fav: (hold Select)"
                 else:
                     snap = mon.get_snapshot(favorite_station_index)
-                    etas = sorted([eta for (_route, eta) in snap.arrivals if eta is not None])
+                    etas = sorted(eta for (_route, eta) in snap.arrivals if eta is not None)
 
                     if not etas:
                         leave_line = "Fav: no ETA"
                     else:
-                        # Pick the first ETA that is >= leave_buffer_min.
-                        # If the first ETA is too soon, use the next one.
+                        buf = int(settings.app.leave_buffer_min)
+
                         chosen_eta = None
                         for eta in etas:
-                            if eta >= leave_buffer_min:
+                            if eta >= buf:
                                 chosen_eta = eta
                                 break
 
-                        # If *all* ETAs are < buffer, fall back to the soonest one
                         if chosen_eta is None:
-                            chosen_eta = etas[0]
-
-                        leave_in = chosen_eta - leave_buffer_min
-                        if leave_in <= 0:
+                            # All trains are too soon
                             leave_line = "Leave now"
                         else:
-                            leave_line = f"Leave in {leave_in:02d} min"
+                            leave_in = chosen_eta - buf
+                            if leave_in <= 0:
+                                leave_line = "Leave now"
+                            else:
+                                leave_line = f"Leave in {leave_in:02d} min"
+
 
 
                 ws = weather.get_snapshot()
