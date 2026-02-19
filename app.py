@@ -69,7 +69,7 @@ def main() -> int:
     lcd = LCDUI(i2c_port=i2c_port, i2c_address=i2c_address)
 
     # Buttons: BCM numbering
-    buttons = Buttons(left_gpio=16, right_gpio=20, select_gpio=21, up_gpio=19, down_gpio=26)
+    buttons = Buttons(left_gpio=6, right_gpio=26, select_gpio=13, up_gpio=5, down_gpio=19)
 
     # MTA background monitor
     mon = Monitor(settings)
